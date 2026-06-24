@@ -1,0 +1,58 @@
+================================================================================
+  AGENDA NO CELULAR DA MARI — como app na tela inicial
+  WhatsApp normal (não precisa ser Business no celular dela)
+================================================================================
+
+O QUE ELA VAI TER
+  Ícone "Agenda Mari" na tela inicial → abre grade da semana (nome + horário).
+  Troca pontual de horário = paciente avisa no WhatsApp (n8n atualiza planilha).
+
+
+OPÇÃO A — EXEMPLO HTML (já pronto, grade fixa)
+----------------------------------------------
+  Arquivo: 04-PLANILHA\AGENDA-Celular-Mari-Collombo.html
+  Atalho:  05-ATALHOS\ABRIR-AGENDA-CELULAR-MARI.bat
+
+  Mostra a rotina fixa (Seg · Ter · Qua · Sex) com datas da semana atual.
+  Serve para ela ver o visual e salvar na tela inicial.
+
+  Para funcionar NO CELULAR dela:
+    1. Envie o HTML por WhatsApp (anexo) OU suba no Google Drive dela
+    2. Abra no Chrome (Android) ou Safari (iPhone)
+    3. Salve na tela inicial (instruções dentro da página)
+
+  Limite: versão HTML local = grade fixa. Remarcações do dia não aparecem
+  até usar a Opção B (planilha ao vivo).
+
+
+OPÇÃO B — AO VIVO (recomendado após planilha pronta)
+----------------------------------------------------
+  Já está no Apps Script Psicologa-MontarPlanilha.gs (função doGet).
+
+  NO COMPUTADOR (uma vez):
+    1. Planilha Google → Extensões → Apps Script
+    2. Implantar → Nova implantação → Tipo: App da Web
+    3. Executar como: eu · Quem acessa: Qualquer pessoa com o link
+    4. Copiar URL https://script.google.com/macros/s/....../exec
+
+  NO CELULAR DA MARI:
+    1. Abrir URL no Chrome/Safari
+    2. Adicionar à tela inicial → nome: Agenda Mari
+    3. Atualizar: puxar página para baixo (refresh)
+
+  Vantagem: lê aba AGENDA da planilha — confirmações e remarcações aparecem.
+
+
+OPÇÃO C — PLANILHA (mais simples, menos “app”)
+----------------------------------------------
+  Menu Psicóloga → Link agenda no celular → aba AGENDA SEMANAL
+  Mesmo passo: Adicionar à tela inicial.
+
+
+RESUMO PARA IMPLANTAÇÃO (2 minutos com a Mari)
+  1. Mostrar HTML de exemplo no celular dela
+  2. Salvar na tela inicial
+  3. Quando planilha + n8n estiverem ativos, trocar o atalho pelo link
+     da Web App (Opção B) — mesmo ícone, dados ao vivo
+
+================================================================================
