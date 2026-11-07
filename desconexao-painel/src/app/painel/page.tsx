@@ -1,0 +1,457 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { PainelPayload } from "../../lib/types";
+
+const TOKEN_KEY = "desconexao_painel_token";
+
+function currentMes(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function money(n: number): string {
+  return n.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 0,
+  });
+}
+
+function pctLabel(n: number): string {
+  const v = n <= 1 ? n * 100 : n;
+  return `${Math.round(v)}%`;
+}
+
+function monthLabel(mes: string): string {
+  const [y, m] = mes.split("-");
+  const names = [
+    "",
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ];
+  return `${names[Number(m)] || m} ${y}`;
+}
+
+export default function PainelPage() {
+  const [token, setToken] = useState("");
+  const [tokenInput, setTokenInput] = useState("");
+  const [mes, setMes] = useState(currentMes());
+  const [data, setData] = useState<PainelPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get("token")?.trim() || "";
+    const stored = sessionStorage.getItem(TOKEN_KEY) || "";
+    const resolved = fromQuery || stored;
+    if (fromQuery) sessionStorage.setItem(TOKEN_KEY, fromQuery);
+    if (resolved) {
+      setToken(resolved);
+      setTokenInput(resolved);
+    }
+    const mesQ = params.get("mes")?.trim();
+    if (mesQ) setMes(mesQ);
+  }, []);
+
+  const load = useCallback(
+    async (t: string, m: string) => {
+      if (!t) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/painel?mes=${encodeURIComponent(m)}`, {
+          headers: { Authorization: `Bearer ${t}` },
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as {
+            message?: string;
+          } | null;
+          throw new Error(body?.message || `HTTP ${res.status}`);
+        }
+        const json = (await res.json()) as PainelPayload;
+        setData(json);
+      } catch (e) {
+        setData(null);
+        setError(e instanceof Error ? e.message : "Falha ao carregar");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (token) void load(token, mes);
+  }, [token, mes, load]);
+
+  const syncNow = async () => {
+    if (!token) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sync?mes=${encodeURIComponent(mes)}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ mes }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          message?: string;
+        } | null;
+        throw new Error(body?.message || `Sync HTTP ${res.status}`);
+      }
+      await load(token, mes);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha no sync");
+      setLoading(false);
+    }
+  };
+
+  const saveToken = () => {
+    const t = tokenInput.trim();
+    if (!t) return;
+    sessionStorage.setItem(TOKEN_KEY, t);
+    setToken(t);
+    const url = new URL(window.location.href);
+    url.searchParams.set("token", t);
+    window.history.replaceState({}, "", url.toString());
+  };
+
+  const bannerClass = useMemo(() => {
+    if (error) return "live-banner error";
+    if (data?.status === "aguardando_credencial_sheets") return "live-banner wait";
+    return "live-banner";
+  }, [data, error]);
+
+  const bannerText = useMemo(() => {
+    if (error) return `Erro · ${error}`;
+    if (!data) return "AO VIVO · carregando…";
+    if (data.status === "aguardando_credencial_sheets") {
+      return "AO VIVO · T.ESTRATÉGICO · aguardando credencial Sheets (amostra)";
+    }
+    return "AO VIVO · T.ESTRATÉGICO · dados da operação";
+  }, [data, error]);
+
+  if (!token) {
+    return (
+      <div className="painel-page">
+        <div className="demo-banner" role="status">
+          Link privado · informe o token de acesso
+        </div>
+        <div className="token-gate">
+          <h1>DESCONEXÃO</h1>
+          <p>
+            Painel de <strong>T.ESTRATÉGICO</strong>. Cole o token do secret{" "}
+            <code>PAINEL_API_TOKEN</code> (ou use o valor de desenvolvimento
+            local).
+          </p>
+          <input
+            type="password"
+            value={tokenInput}
+            onChange={(e) => setTokenInput(e.target.value)}
+            placeholder="Bearer token"
+            aria-label="Token de acesso"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveToken();
+            }}
+          />
+          <button className="btn btn-primary" type="button" onClick={saveToken}>
+            Entrar no painel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const kpis = data?.kpis;
+  const colunas = data?.grade_tecnicos.colunas || [];
+  const dias = data?.grade_tecnicos.dias || [];
+  const evo = data?.evolucao_mensal || [];
+  const maxEvo = Math.max(1, ...evo.map((d) => d.recolhas));
+  const cidadeMeses = ["AGO", "SET", "OUT", "NOV"] as const;
+
+  return (
+    <div className="painel-page">
+      <div className={bannerClass} role="status">
+        {bannerText}
+      </div>
+
+      <header className="painel-header">
+        <div className="container painel-header-inner">
+          <div className="painel-identity">
+            <a className="brand" href="/">
+              DESCONEXÃO
+            </a>
+            <span className="empresa">
+              <strong>T.ESTRATÉGICO</strong>
+            </span>
+            {data?.fonte ? (
+              <span className="status-pill">{data.fonte}</span>
+            ) : null}
+          </div>
+          <div className="painel-controls">
+            <label className="field-month">
+              Mês
+              <select
+                aria-label="Selecionar mês"
+                value={mes}
+                onChange={(e) => setMes(e.target.value)}
+              >
+                <option value="2026-08">Ago/2026</option>
+                <option value="2026-09">Set/2026</option>
+                <option value="2026-10">Out/2026</option>
+                <option value="2026-11">Nov/2026</option>
+              </select>
+            </label>
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
+              onClick={() => void load(token, mes)}
+              disabled={loading}
+            >
+              Atualizar
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              type="button"
+              onClick={() => void syncNow()}
+              disabled={loading}
+            >
+              Sincronizar
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="painel-main">
+        <div className="container">
+          {data?.mensagem ? (
+            <p className="painel-foot" style={{ marginBottom: "1rem" }}>
+              {data.mensagem}
+            </p>
+          ) : null}
+
+          <section className="kpi-grid" aria-label="Indicadores do mês">
+            <article className="kpi reveal">
+              <div className="kpi-label">Equip. recolhidos</div>
+              <div className="kpi-value">{kpis?.recolhidos ?? "—"}</div>
+            </article>
+            <article className="kpi reveal reveal-delay-1">
+              <div className="kpi-label">Entregues</div>
+              <div className="kpi-value">{kpis?.entregues ?? "—"}</div>
+            </article>
+            <article className="kpi reveal reveal-delay-2">
+              <div className="kpi-label">Em processo</div>
+              <div className="kpi-value">{kpis?.em_processo ?? "—"}</div>
+            </article>
+            <article className="kpi reveal reveal-delay-3">
+              <div className="kpi-label">% Entregue</div>
+              <div className="kpi-value">
+                {kpis ? pctLabel(kpis.pct_entregue) : "—"}
+              </div>
+            </article>
+          </section>
+
+          <section className="painel-block" aria-labelledby="grade-title">
+            <div className="painel-block-head">
+              <h2 id="grade-title">Grade por técnico</h2>
+              <span>
+                {monthLabel(mes)} · dia × técnico
+              </span>
+            </div>
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Dia</th>
+                    {colunas.map((c) => (
+                      <th key={c.codigo}>
+                        {c.nome}
+                        <span className="sub">{c.codigo}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {dias.map((row) => {
+                    const [day, ...counts] = row;
+                    return (
+                      <tr key={day}>
+                        <td>{String(day).padStart(2, "0")}</td>
+                        {counts.map((n, i) => (
+                          <td key={`${day}-${i}`}>{n}</td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td>TOTAL</td>
+                    {colunas.map((_, i) => {
+                      const sum = dias.reduce(
+                        (acc, row) => acc + (row[i + 1] || 0),
+                        0,
+                      );
+                      return <td key={`t-${i}`}>{sum}</td>;
+                    })}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
+
+          <div className="split-row">
+            <section className="painel-block" aria-labelledby="cidade-title">
+              <div className="painel-block-head">
+                <h2 id="cidade-title">Por cidade × mês</h2>
+                <span>Recolhas</span>
+              </div>
+              <div className="table-wrap">
+                <table className="data compact">
+                  <thead>
+                    <tr>
+                      <th>Cidade</th>
+                      {cidadeMeses.map((m) => (
+                        <th key={m}>{m}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.por_cidade_mes || []).map((c) => (
+                      <tr key={c.cidade}>
+                        <td>{c.cidade}</td>
+                        {cidadeMeses.map((m) => (
+                          <td key={m}>{c.meses[m] ?? 0}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="painel-block" aria-labelledby="evo-title">
+              <div className="painel-block-head">
+                <h2 id="evo-title">Evolução mensal</h2>
+                <span>Recolhas</span>
+              </div>
+              <div className="chart" aria-label="Gráfico de barras">
+                <div className="chart-plot">
+                  {evo.map((d, i) => {
+                    const h = Math.max(
+                      8,
+                      Math.round((d.recolhas / maxEvo) * 100),
+                    );
+                    return (
+                      <div className="chart-col" key={`${d.mes}-${i}`}>
+                        <div className="chart-bar-wrap">
+                          <div
+                            className="chart-bar"
+                            style={{
+                              height: `${h}%`,
+                              animationDelay: `${0.08 + i * 0.08}s`,
+                            }}
+                          >
+                            <span className="chart-bar-value">{d.recolhas}</span>
+                          </div>
+                        </div>
+                        <span className="chart-label">{d.mes}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="chart-legend">MÊS / RECOLHAS</p>
+              </div>
+            </section>
+          </div>
+
+          <section className="painel-block" aria-labelledby="pagar-title">
+            <div className="painel-block-head">
+              <h2 id="pagar-title">A pagar</h2>
+              <span>{monthLabel(mes)}</span>
+            </div>
+            <div className="table-wrap">
+              <table className="data compact">
+                <thead>
+                  <tr>
+                    <th>Técnico</th>
+                    <th>Volume</th>
+                    <th>Tarifa</th>
+                    <th>A pagar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.a_pagar || []).map((r) => (
+                    <tr key={`${r.tecnico}-${r.codigo}`}>
+                      <td>
+                        {r.tecnico}
+                        {r.codigo ? (
+                          <span
+                            className="sub"
+                            style={{
+                              display: "block",
+                              color: "var(--muted)",
+                              fontSize: "0.75rem",
+                            }}
+                          >
+                            {r.codigo}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td>{r.volume}</td>
+                      <td className={r.tarifa === 0 ? "money zero" : "money"}>
+                        {money(r.tarifa)}
+                      </td>
+                      <td className={r.valor === 0 ? "money zero" : "money"}>
+                        {money(r.valor)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="total-row">
+                    <td>TOTAL</td>
+                    <td />
+                    <td />
+                    <td className="money">
+                      {money(
+                        (data?.a_pagar || []).reduce((s, r) => s + r.valor, 0),
+                      )}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
+
+          <div className="painel-foot">
+            <p>
+              Slice 1 · API + Postgres · atualizado{" "}
+              {data?.atualizado_em
+                ? new Date(data.atualizado_em).toLocaleString("pt-BR")
+                : "—"}
+            </p>
+            <a href="/">← Início</a>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
