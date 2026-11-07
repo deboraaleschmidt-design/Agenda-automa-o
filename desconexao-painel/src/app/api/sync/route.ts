@@ -2,6 +2,7 @@ import { requirePainelToken } from "../../../lib/auth";
 import { clientKey, rateLimit } from "../../../lib/rate-limit";
 import { ensureSeed } from "../../../lib/seed";
 import { parseMesParam } from "../../../lib/servico";
+import { classifyServiceAccountJson } from "../../../lib/sheets-creds";
 import { syncPainelSnapshot } from "../../../lib/sheets-sync";
 
 export const runtime = "nodejs";
@@ -47,6 +48,11 @@ export async function POST(request: Request) {
   await ensureSeed(mes);
   const result = await syncPainelSnapshot(mes);
 
+  // Safe shape only — never echo secret content.
+  const creds = classifyServiceAccountJson(
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
+  );
+
   return Response.json({
     ok: true,
     usedFixture: result.usedFixture,
@@ -55,5 +61,8 @@ export async function POST(request: Request) {
     fonte: result.payload.fonte,
     atualizado_em: result.payload.atualizado_em,
     mensagem: result.payload.mensagem,
+    credsShape: creds.shape,
+    credsStartsWithBrace: creds.startsWithBrace,
+    credsLengthClass: creds.lengthClass,
   });
 }
