@@ -62,11 +62,13 @@ export default function PainelPage() {
     }
   }, []);
 
-  const load = useCallback(async (m: string) => {
+  const load = useCallback(async (m: string, refresh = false) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/painel?mes=${encodeURIComponent(m)}`, {
+      const q = new URLSearchParams({ mes: m });
+      if (refresh) q.set("refresh", "1");
+      const res = await fetch(`/api/painel?${q}`, {
         credentials: "include",
         cache: "no-store",
       });
@@ -317,7 +319,7 @@ export default function PainelPage() {
             <button
               className="btn btn-ghost btn-sm"
               type="button"
-              onClick={() => void load(mes)}
+              onClick={() => void load(mes, true)}
               disabled={loading}
             >
               Atualizar

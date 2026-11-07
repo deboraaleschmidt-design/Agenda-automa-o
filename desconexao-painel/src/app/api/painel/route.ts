@@ -1,7 +1,9 @@
 import { requirePainelToken } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
+import { clientKey, rateLimit } from "../../../lib/rate-limit";
 import { ensureSeed } from "../../../lib/seed";
 import { parseMesParam } from "../../../lib/servico";
+import { syncPainelSnapshot } from "../../../lib/sheets-sync";
 import {
   EMPRESA_SEED_ID,
   SETOR_DESCONEXAO,
@@ -10,6 +12,8 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const STALE_MS = 2 * 60 * 1000;
 
 function currentMes(): string {
   const d = new Date();
@@ -37,9 +41,10 @@ export async function GET(request: Request) {
     );
   }
 
+  const forceRefresh = url.searchParams.get("refresh") === "1";
   await ensureSeed(mes);
 
-  const rows = await sql<{
+  let rows = await sql<{
     payload: PainelPayload;
     atualizado_em: string;
     fonte: string;
@@ -51,23 +56,39 @@ export async function GET(request: Request) {
     [EMPRESA_SEED_ID, setor, mes],
   );
 
-  if (rows.length === 0) {
+  let payload =
+    rows[0] &&
+    (typeof rows[0].payload === "string"
+      ? (JSON.parse(rows[0].payload) as PainelPayload)
+      : rows[0].payload);
+
+  const updatedAt = payload?.atualizado_em
+    ? Date.parse(payload.atualizado_em)
+    : 0;
+  const stale =
+    !payload ||
+    payload.fonte === "fixture" ||
+    payload.status === "aguardando_credencial_sheets" ||
+    !Number.isFinite(updatedAt) ||
+    Date.now() - updatedAt > STALE_MS;
+
+  if (forceRefresh || stale) {
+    const limited = rateLimit(`autosync:${clientKey(request)}`, 6, 5 * 60 * 1000);
+    if (!limited) {
+      const result = await syncPainelSnapshot(mes);
+      payload = result.payload;
+    }
+  }
+
+  if (!payload) {
     return Response.json(
       { error: "not_found", message: `Sem snapshot para ${mes}` },
       { status: 404 },
     );
   }
 
-  const row = rows[0];
-  const payload =
-    typeof row.payload === "string"
-      ? (JSON.parse(row.payload) as PainelPayload)
-      : row.payload;
-
   return Response.json({
     ...payload,
     por_tipo_servico: payload.por_tipo_servico || [],
-    atualizado_em: payload.atualizado_em || row.atualizado_em,
-    fonte: payload.fonte || row.fonte,
   });
 }

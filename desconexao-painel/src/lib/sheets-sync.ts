@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { sql } from "./db";
 import { buildFixturePayload } from "./fixture";
+import { inspectServiceAccountJson } from "./sheets-creds";
 import {
   countsToList,
   emptyServicoCounts,
@@ -29,27 +30,30 @@ export async function syncPainelSnapshot(mes: string): Promise<SyncResult> {
   if (!parsed) {
     const payload = buildFixturePayload(
       `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
+      "Mês inválido. Use YYYY-MM.",
     );
-    payload.mensagem = "Mês inválido. Use YYYY-MM.";
     await upsertSnapshot(payload);
     return { payload, usedFixture: true };
   }
 
-  const creds = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
-  if (!creds) {
-    const payload = buildFixturePayload(mes);
+  const inspected = inspectServiceAccountJson(
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
+  );
+  if (!inspected.ok || !inspected.parsed) {
+    const payload = buildFixturePayload(mes, inspected.reason);
     await upsertSnapshot(payload);
     return { payload, usedFixture: true };
   }
 
   try {
-    const payload = await readFromSheets(mes, creds);
+    const payload = await readFromSheets(mes, inspected.parsed);
     await upsertSnapshot(payload);
     return { payload, usedFixture: false };
   } catch {
-    const payload = buildFixturePayload(mes);
-    payload.mensagem =
-      "Não foi possível ler a planilha agora. Confira o compartilhamento (Leitor) com a service account e tente Sincronizar de novo.";
+    const payload = buildFixturePayload(
+      mes,
+      "Não foi possível ler a planilha. Confira: (1) JSON da service account válido; (2) planilha compartilhada como Leitor com o e-mail …@….iam.gserviceaccount.com; (3) abas PAINEL e Respostas existem.",
+    );
     await upsertSnapshot(payload);
     return { payload, usedFixture: true };
   }
@@ -78,12 +82,8 @@ async function upsertSnapshot(payload: PainelPayload): Promise<void> {
 
 async function readFromSheets(
   mes: string,
-  credsRaw: string,
+  credentials: { client_email: string; private_key: string },
 ): Promise<PainelPayload> {
-  const credentials = JSON.parse(credsRaw) as {
-    client_email: string;
-    private_key: string;
-  };
   const auth = new google.auth.JWT({
     email: credentials.client_email,
     key: credentials.private_key,
@@ -188,8 +188,6 @@ async function readFromSheets(
     });
   }
 
-  const por_tipo_servico = aggregateServicos(respostas, mes);
-
   return {
     empresa: { id: EMPRESA_SEED_ID, nome_publico: NOME_PUBLICO },
     setor: SETOR_DESCONEXAO,
@@ -201,7 +199,7 @@ async function readFromSheets(
     grade_tecnicos: { colunas, dias },
     por_cidade_mes,
     evolucao_mensal,
-    por_tipo_servico,
+    por_tipo_servico: aggregateServicos(respostas, mes),
     a_pagar,
   };
 }
@@ -215,7 +213,6 @@ function aggregateServicos(
   if (!target || respostas.length < 2) return countsToList(counts);
 
   const map = mapRespostasHeader(respostas[0] || []);
-  // Fallback to column L (index 11) if header not found
   const servicoCol = map.servico >= 0 ? map.servico : 11;
 
   for (let i = 1; i < respostas.length; i++) {
