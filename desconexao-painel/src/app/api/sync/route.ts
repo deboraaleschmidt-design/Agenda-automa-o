@@ -1,9 +1,14 @@
 import { requirePainelToken } from "../../../lib/auth";
+import { clientKey, rateLimit } from "../../../lib/rate-limit";
 import { ensureSeed } from "../../../lib/seed";
 import { syncPainelSnapshot } from "../../../lib/sheets-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** Max 3 syncs per IP per 5 minutes. */
+const SYNC_LIMIT = 3;
+const SYNC_WINDOW_MS = 5 * 60 * 1000;
 
 function currentMes(): string {
   const d = new Date();
@@ -13,6 +18,13 @@ function currentMes(): string {
 export async function POST(request: Request) {
   const denied = requirePainelToken(request);
   if (denied) return denied;
+
+  const limited = rateLimit(
+    `sync:${clientKey(request)}`,
+    SYNC_LIMIT,
+    SYNC_WINDOW_MS,
+  );
+  if (limited) return limited;
 
   const url = new URL(request.url);
   let mes = url.searchParams.get("mes")?.trim() || currentMes();

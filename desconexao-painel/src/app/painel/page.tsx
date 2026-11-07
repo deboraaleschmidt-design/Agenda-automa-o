@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PainelPayload } from "../../lib/types";
 
-const TOKEN_KEY = "desconexao_painel_token";
-
 function currentMes(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -44,7 +42,8 @@ function monthLabel(mes: string): string {
 }
 
 export default function PainelPage() {
-  const [token, setToken] = useState("");
+  const [authed, setAuthed] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [tokenInput, setTokenInput] = useState("");
   const [mes, setMes] = useState(currentMes());
   const [data, setData] = useState<PainelPayload | null>(null);
@@ -53,61 +52,110 @@ export default function PainelPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const fromQuery = params.get("token")?.trim() || "";
-    const stored = sessionStorage.getItem(TOKEN_KEY) || "";
-    const resolved = fromQuery || stored;
-    if (fromQuery) sessionStorage.setItem(TOKEN_KEY, fromQuery);
-    if (resolved) {
-      setToken(resolved);
-      setTokenInput(resolved);
-    }
     const mesQ = params.get("mes")?.trim();
     if (mesQ) setMes(mesQ);
+    // Strip any legacy ?token= from the URL without reading it into storage.
+    if (params.has("token")) {
+      params.delete("token");
+      const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
+      window.history.replaceState({}, "", next);
+    }
   }, []);
 
-  const load = useCallback(
-    async (t: string, m: string) => {
-      if (!t) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`/api/painel?mes=${encodeURIComponent(m)}`, {
-          headers: { Authorization: `Bearer ${t}` },
-          cache: "no-store",
-        });
-        if (!res.ok) {
-          const body = (await res.json().catch(() => null)) as {
-            message?: string;
-          } | null;
-          throw new Error(body?.message || `HTTP ${res.status}`);
+  const load = useCallback(async (m: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/painel?mes=${encodeURIComponent(m)}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          message?: string;
+        } | null;
+        if (res.status === 401) {
+          setAuthed(false);
         }
-        const json = (await res.json()) as PainelPayload;
-        setData(json);
-      } catch (e) {
-        setData(null);
-        setError(e instanceof Error ? e.message : "Falha ao carregar");
-      } finally {
-        setLoading(false);
+        throw new Error(body?.message || `HTTP ${res.status}`);
       }
-    },
-    [],
-  );
+      const json = (await res.json()) as PainelPayload;
+      setData(json);
+      setAuthed(true);
+    } catch (e) {
+      setData(null);
+      setError(e instanceof Error ? e.message : "Falha ao carregar");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (token) void load(token, mes);
-  }, [token, mes, load]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/session", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          setAuthed(true);
+        } else {
+          setAuthed(false);
+        }
+      } catch {
+        if (!cancelled) setAuthed(false);
+      } finally {
+        if (!cancelled) setChecking(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (authed && !checking) void load(mes);
+  }, [authed, checking, mes, load]);
+
+  const saveToken = async () => {
+    const t = tokenInput.trim();
+    if (!t) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/session", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: t }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          message?: string;
+        } | null;
+        throw new Error(body?.message || `HTTP ${res.status}`);
+      }
+      setTokenInput("");
+      setAuthed(true);
+      await load(mes);
+    } catch (e) {
+      setAuthed(false);
+      setError(e instanceof Error ? e.message : "Falha ao autenticar");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const syncNow = async () => {
-    if (!token) return;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/sync?mes=${encodeURIComponent(mes)}`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mes }),
       });
       if (!res.ok) {
@@ -116,21 +164,11 @@ export default function PainelPage() {
         } | null;
         throw new Error(body?.message || `Sync HTTP ${res.status}`);
       }
-      await load(token, mes);
+      await load(mes);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha no sync");
       setLoading(false);
     }
-  };
-
-  const saveToken = () => {
-    const t = tokenInput.trim();
-    if (!t) return;
-    sessionStorage.setItem(TOKEN_KEY, t);
-    setToken(t);
-    const url = new URL(window.location.href);
-    url.searchParams.set("token", t);
-    window.history.replaceState({}, "", url.toString());
   };
 
   const bannerClass = useMemo(() => {
@@ -148,7 +186,17 @@ export default function PainelPage() {
     return "AO VIVO · T.ESTRATÉGICO · dados da operação";
   }, [data, error]);
 
-  if (!token) {
+  if (checking) {
+    return (
+      <div className="painel-page">
+        <div className="demo-banner" role="status">
+          Verificando sessão…
+        </div>
+      </div>
+    );
+  }
+
+  if (!authed) {
     return (
       <div className="painel-page">
         <div className="demo-banner" role="status">
@@ -158,20 +206,27 @@ export default function PainelPage() {
           <h1>DESCONEXÃO</h1>
           <p>
             Painel de <strong>T.ESTRATÉGICO</strong>. Cole o token do secret{" "}
-            <code>PAINEL_API_TOKEN</code> (ou use o valor de desenvolvimento
-            local).
+            <code>PAINEL_API_TOKEN</code>. Em desenvolvimento local, use{" "}
+            <code>dev-local-token</code> quando o secret não estiver definido.
           </p>
+          {error ? <p style={{ color: "var(--accent)" }}>{error}</p> : null}
           <input
             type="password"
             value={tokenInput}
             onChange={(e) => setTokenInput(e.target.value)}
-            placeholder="Bearer token"
+            placeholder="Token de acesso"
             aria-label="Token de acesso"
+            autoComplete="current-password"
             onKeyDown={(e) => {
-              if (e.key === "Enter") saveToken();
+              if (e.key === "Enter") void saveToken();
             }}
           />
-          <button className="btn btn-primary" type="button" onClick={saveToken}>
+          <button
+            className="btn btn-primary"
+            type="button"
+            onClick={() => void saveToken()}
+            disabled={loading}
+          >
             Entrar no painel
           </button>
         </div>
@@ -222,7 +277,7 @@ export default function PainelPage() {
             <button
               className="btn btn-ghost btn-sm"
               type="button"
-              onClick={() => void load(token, mes)}
+              onClick={() => void load(mes)}
               disabled={loading}
             >
               Atualizar
@@ -271,9 +326,7 @@ export default function PainelPage() {
           <section className="painel-block" aria-labelledby="grade-title">
             <div className="painel-block-head">
               <h2 id="grade-title">Grade por técnico</h2>
-              <span>
-                {monthLabel(mes)} · dia × técnico
-              </span>
+              <span>{monthLabel(mes)} · dia × técnico</span>
             </div>
             <div className="table-wrap">
               <table className="data">
