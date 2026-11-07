@@ -73,7 +73,11 @@ export async function GET(request: Request) {
     Date.now() - updatedAt > STALE_MS;
 
   if (forceRefresh || stale) {
-    const limited = rateLimit(`autosync:${clientKey(request)}`, 6, 5 * 60 * 1000);
+    const limited = rateLimit(
+      `autosync:${clientKey(request)}`,
+      20,
+      5 * 60 * 1000,
+    );
     if (!limited) {
       const result = await syncPainelSnapshot(mes);
       payload = result.payload;

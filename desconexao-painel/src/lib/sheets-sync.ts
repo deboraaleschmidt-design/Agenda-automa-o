@@ -49,13 +49,53 @@ export async function syncPainelSnapshot(mes: string): Promise<SyncResult> {
     const payload = await readFromSheets(mes, inspected.parsed);
     await upsertSnapshot(payload);
     return { payload, usedFixture: false };
-  } catch {
-    const payload = buildFixturePayload(
-      mes,
-      "Não foi possível ler a planilha. Confira: (1) JSON da service account válido; (2) planilha compartilhada como Leitor com o e-mail …@….iam.gserviceaccount.com; (3) abas PAINEL e Respostas existem.",
-    );
+  } catch (error) {
+    const payload = buildFixturePayload(mes, humanizeSheetsError(error));
     await upsertSnapshot(payload);
     return { payload, usedFixture: true };
+  }
+}
+
+function humanizeSheetsError(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error || "");
+  const lower = msg.toLowerCase();
+  if (
+    lower.includes("permission") ||
+    lower.includes("forbidden") ||
+    lower.includes("403") ||
+    lower.includes("the caller does not have permission")
+  ) {
+    return `Sem permissão na planilha. Compartilhe com ${inspectedEmailHint()} como Editor ou Leitor e tente de novo.`;
+  }
+  if (
+    lower.includes("not found") ||
+    lower.includes("404") ||
+    lower.includes("unable to parse range")
+  ) {
+    return "Planilha ou aba não encontrada. Confira GOOGLE_SHEETS_ID e se existem as abas PAINEL, PAINEL RECOLHAS e Respostas ao formulário 1.";
+  }
+  if (
+    lower.includes("invalid_grant") ||
+    lower.includes("invalid jwt") ||
+    lower.includes("private key") ||
+    lower.includes("decoder") ||
+    lower.includes("decrypt")
+  ) {
+    return "JSON da service account inválido ou chave corrompida. Em My Secrets, edite GOOGLE_SERVICE_ACCOUNT_JSON e cole de novo o arquivo .json completo.";
+  }
+  if (lower.includes("sheets.googleapis.com") && lower.includes("has not been used")) {
+    return "Ative a Google Sheets API no projeto n8n-integracao (APIs e serviços → Biblioteca).";
+  }
+  return "Não foi possível ler a planilha agora. Confira compartilhamento com a service account, Sheets API ativa e o JSON em My Secrets; aguarde 1 minuto e clique Sincronizar uma vez.";
+}
+
+function inspectedEmailHint(): string {
+  try {
+    const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() || "";
+    const email = (JSON.parse(raw) as { client_email?: string }).client_email;
+    return email || "o e-mail …@….iam.gserviceaccount.com";
+  } catch {
+    return "desconexao-painel-reader@n8n-integracao-494215.iam.gserviceaccount.com";
   }
 }
 
@@ -84,10 +124,14 @@ async function readFromSheets(
   mes: string,
   credentials: { client_email: string; private_key: string },
 ): Promise<PainelPayload> {
+  const key = credentials.private_key.replace(/\\n/g, "\n");
   const auth = new google.auth.JWT({
     email: credentials.client_email,
-    key: credentials.private_key,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
+    key,
+    scopes: [
+      "https://www.googleapis.com/auth/spreadsheets.readonly",
+      "https://www.googleapis.com/auth/drive.readonly",
+    ],
   });
   const sheets = google.sheets({ version: "v4", auth });
   const spreadsheetId = SPREADSHEET_ID;

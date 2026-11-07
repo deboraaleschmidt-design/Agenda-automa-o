@@ -7,7 +7,7 @@ import { syncPainelSnapshot } from "../../../lib/sheets-sync";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SYNC_LIMIT = 3;
+const SYNC_LIMIT = 12;
 const SYNC_WINDOW_MS = 5 * 60 * 1000;
 
 function currentMes(): string {
