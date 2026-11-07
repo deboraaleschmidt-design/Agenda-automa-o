@@ -76,6 +76,12 @@ export function buildFixturePayload(mes: string): PainelPayload {
       { mes: "OUT", recolhas: 389 },
       { mes: "NOV", recolhas: 428 },
     ],
+    por_tipo_servico: [
+      { tipo: "DESCONEXÃO", quantidade: 186 },
+      { tipo: "RETIRADA", quantidade: 142 },
+      { tipo: "INSTALAÇÃO", quantidade: 58 },
+      { tipo: "TROCA PACOTE/TECNOLOGIA", quantidade: 42 },
+    ],
     a_pagar: [
       { tecnico: "Guilherme", codigo: "Z698465", volume: 58, tarifa: 0, valor: 0 },
       { tecnico: "Alexandre", codigo: "Z698466", volume: 52, tarifa: 0, valor: 0 },

@@ -2,6 +2,14 @@ import { google } from "googleapis";
 import { sql } from "./db";
 import { buildFixturePayload } from "./fixture";
 import {
+  countsToList,
+  emptyServicoCounts,
+  mapRespostasHeader,
+  monthKeyFromCell,
+  normalizeServico,
+  parseMesParam,
+} from "./servico";
+import {
   EMPRESA_SEED_ID,
   MONTH_KEYS,
   NOME_PUBLICO,
@@ -17,6 +25,16 @@ type SyncResult = {
 };
 
 export async function syncPainelSnapshot(mes: string): Promise<SyncResult> {
+  const parsed = parseMesParam(mes);
+  if (!parsed) {
+    const payload = buildFixturePayload(
+      `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
+    );
+    payload.mensagem = "Mês inválido. Use YYYY-MM.";
+    await upsertSnapshot(payload);
+    return { payload, usedFixture: true };
+  }
+
   const creds = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
   if (!creds) {
     const payload = buildFixturePayload(mes);
@@ -28,11 +46,10 @@ export async function syncPainelSnapshot(mes: string): Promise<SyncResult> {
     const payload = await readFromSheets(mes, creds);
     await upsertSnapshot(payload);
     return { payload, usedFixture: false };
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Falha ao ler Google Sheets";
+  } catch {
     const payload = buildFixturePayload(mes);
-    payload.mensagem = `Aguardando/erro Sheets: ${message}`;
+    payload.mensagem =
+      "Não foi possível ler a planilha agora. Confira o compartilhamento (Leitor) com a service account e tente Sincronizar de novo.";
     await upsertSnapshot(payload);
     return { payload, usedFixture: true };
   }
@@ -82,6 +99,7 @@ async function readFromSheets(
       "PAINEL!A8:AG13",
       "PAINEL!A15:N40",
       "'PAINEL RECOLHAS'!A4:E40",
+      "'Respostas ao formulário 1'!A1:S",
     ],
     valueRenderOption: "UNFORMATTED_VALUE",
   });
@@ -91,6 +109,7 @@ async function readFromSheets(
   const gradeBlock = ranges[1]?.values || [];
   const cityBlock = ranges[2]?.values || [];
   const pagarBlock = ranges[3]?.values || [];
+  const respostas = ranges[4]?.values || [];
 
   const kpiValues = kpiBlock[1] || [];
   const recolhidos = num(kpiValues[0]);
@@ -109,9 +128,7 @@ async function readFromSheets(
   for (const row of gradeBlock.slice(1)) {
     const code = String(row[0] || "").trim().toUpperCase();
     if (!techOrder.includes(code)) continue;
-    byCode[code] = techOrder.includes(code)
-      ? row.slice(1, 32).map((v) => num(v))
-      : [];
+    byCode[code] = row.slice(1, 32).map((v) => num(v));
   }
 
   const dias: number[][] = [];
@@ -162,17 +179,16 @@ async function readFromSheets(
   for (const row of pagarBlock.slice(1)) {
     const tecnico = String(row[0] || "").trim();
     if (!tecnico || tecnico.toUpperCase().startsWith("TOTAL")) continue;
-    const volume = num(row[1]);
-    const tarifa = num(row[2]);
-    const valor = num(row[3]);
     a_pagar.push({
       tecnico,
       codigo: "",
-      volume,
-      tarifa,
-      valor,
+      volume: num(row[1]),
+      tarifa: num(row[2]),
+      valor: num(row[3]),
     });
   }
+
+  const por_tipo_servico = aggregateServicos(respostas, mes);
 
   return {
     empresa: { id: EMPRESA_SEED_ID, nome_publico: NOME_PUBLICO },
@@ -185,14 +201,47 @@ async function readFromSheets(
     grade_tecnicos: { colunas, dias },
     por_cidade_mes,
     evolucao_mensal,
+    por_tipo_servico,
     a_pagar,
   };
+}
+
+function aggregateServicos(
+  respostas: unknown[][],
+  mes: string,
+): PainelPayload["por_tipo_servico"] {
+  const target = parseMesParam(mes);
+  const counts: Record<string, number> = { ...emptyServicoCounts(), OUTROS: 0 };
+  if (!target || respostas.length < 2) return countsToList(counts);
+
+  const map = mapRespostasHeader(respostas[0] || []);
+  // Fallback to column L (index 11) if header not found
+  const servicoCol = map.servico >= 0 ? map.servico : 11;
+
+  for (let i = 1; i < respostas.length; i++) {
+    const row = respostas[i] || [];
+    if (map.serial >= 0 && !String(row[map.serial] || "").trim()) continue;
+    const dataVal = map.data >= 0 ? row[map.data] : undefined;
+    const tsVal = map.ts >= 0 ? row[map.ts] : undefined;
+    const periodVal = map.period >= 0 ? row[map.period] : undefined;
+    const mk =
+      monthKeyFromCell(dataVal, periodVal) ||
+      monthKeyFromCell(tsVal, periodVal);
+    if (!mk || mk.y !== target.y || mk.m !== target.m) continue;
+    const tipo = normalizeServico(row[servicoCol]);
+    counts[tipo] = (counts[tipo] || 0) + 1;
+  }
+  return countsToList(counts);
 }
 
 function num(v: unknown): number {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string") {
-    const cleaned = v.replace("%", "").replace(/\./g, "").replace(",", ".").trim();
+    const cleaned = v
+      .replace("%", "")
+      .replace(/\./g, "")
+      .replace(",", ".")
+      .trim();
     const n = Number(cleaned);
     return Number.isFinite(n) ? n : 0;
   }

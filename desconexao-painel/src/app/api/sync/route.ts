@@ -1,12 +1,12 @@
 import { requirePainelToken } from "../../../lib/auth";
 import { clientKey, rateLimit } from "../../../lib/rate-limit";
 import { ensureSeed } from "../../../lib/seed";
+import { parseMesParam } from "../../../lib/servico";
 import { syncPainelSnapshot } from "../../../lib/sheets-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Max 3 syncs per IP per 5 minutes. */
 const SYNC_LIMIT = 3;
 const SYNC_WINDOW_MS = 5 * 60 * 1000;
 
@@ -35,6 +35,13 @@ export async function POST(request: Request) {
     if (body?.mes) mes = body.mes.trim();
   } catch {
     /* empty body ok */
+  }
+
+  if (!parseMesParam(mes)) {
+    return Response.json(
+      { error: "bad_request", message: "Parâmetro mes inválido. Use YYYY-MM." },
+      { status: 400 },
+    );
   }
 
   await ensureSeed(mes);

@@ -5,12 +5,24 @@ import {
   sessionCookieHeader,
   tokensMatch,
 } from "../../../lib/auth";
+import { clientKey, rateLimit } from "../../../lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** Max 10 login attempts per IP per 15 minutes. */
+const SESSION_LIMIT = 10;
+const SESSION_WINDOW_MS = 15 * 60 * 1000;
+
 /** Establish httpOnly session cookie from Bearer or JSON body `{ token }`. */
 export async function POST(request: Request) {
+  const limited = rateLimit(
+    `session:${clientKey(request)}`,
+    SESSION_LIMIT,
+    SESSION_WINDOW_MS,
+  );
+  if (limited) return limited;
+
   const expected = resolveExpectedToken();
   if (!expected) {
     return Response.json(

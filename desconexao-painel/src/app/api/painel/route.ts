@@ -1,7 +1,12 @@
 import { requirePainelToken } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 import { ensureSeed } from "../../../lib/seed";
-import { EMPRESA_SEED_ID, SETOR_DESCONEXAO, type PainelPayload } from "../../../lib/types";
+import { parseMesParam } from "../../../lib/servico";
+import {
+  EMPRESA_SEED_ID,
+  SETOR_DESCONEXAO,
+  type PainelPayload,
+} from "../../../lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,12 +21,29 @@ export async function GET(request: Request) {
   if (denied) return denied;
 
   const url = new URL(request.url);
-  const mes = url.searchParams.get("mes")?.trim() || currentMes();
+  const rawMes = url.searchParams.get("mes")?.trim() || currentMes();
+  if (!parseMesParam(rawMes)) {
+    return Response.json(
+      { error: "bad_request", message: "Parâmetro mes inválido. Use YYYY-MM." },
+      { status: 400 },
+    );
+  }
+  const mes = rawMes;
   const setor = url.searchParams.get("setor")?.trim() || SETOR_DESCONEXAO;
+  if (setor !== SETOR_DESCONEXAO) {
+    return Response.json(
+      { error: "bad_request", message: "Setor não suportado neste slice." },
+      { status: 400 },
+    );
+  }
 
   await ensureSeed(mes);
 
-  const rows = await sql<{ payload: PainelPayload; atualizado_em: string; fonte: string }>(
+  const rows = await sql<{
+    payload: PainelPayload;
+    atualizado_em: string;
+    fonte: string;
+  }>(
     `SELECT payload, atualizado_em::text, fonte
      FROM painel_snapshots
      WHERE empresa_id = $1 AND setor = $2 AND mes = $3
@@ -44,6 +66,7 @@ export async function GET(request: Request) {
 
   return Response.json({
     ...payload,
+    por_tipo_servico: payload.por_tipo_servico || [],
     atualizado_em: payload.atualizado_em || row.atualizado_em,
     fonte: payload.fonte || row.fonte,
   });

@@ -18,9 +18,9 @@
   --demo-banner: #fff3cd;
   --demo-ink: #6b5300;
   --radius: 4px;
-  --font-display: "Teko", "Arial Narrow", sans-serif;
-  --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display: var(--font-teko), "Arial Narrow", sans-serif;
+  --font-body: var(--font-plex-sans), "Segoe UI", sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
   --shadow-soft: 0 12px 40px rgba(21, 32, 43, 0.08);
   --max: 1120px;
 }
@@ -759,6 +759,28 @@ body.painel-page,
   margin-bottom: 1.5rem;
 }
 
+.servico-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.85rem;
+}
+
+.servico-card {
+  background: var(--steel-deep);
+  color: #fff;
+  padding: 1rem 0.9rem 0.95rem;
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.servico-card .kpi-label {
+  opacity: 0.9;
+}
+
+.servico-card .kpi-value {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+}
+
 .kpi {
   background: var(--accent);
   color: #fff;
@@ -1010,6 +1032,7 @@ table.data.compact {
 @media (max-width: 900px) {
   .solucao-kpis,
   .kpi-grid,
+  .servico-grid,
   .steps,
   .split-row {
     grid-template-columns: 1fr 1fr;
@@ -1037,13 +1060,15 @@ table.data.compact {
 
   .solucao-kpis,
   .kpi-grid,
+  .servico-grid,
   .steps,
   .price-grid,
   .split-row {
     grid-template-columns: 1fr;
   }
 
-  .kpi-grid {
+  .kpi-grid,
+  .servico-grid {
     grid-template-columns: 1fr 1fr;
   }
 

@@ -239,7 +239,21 @@ export default function PainelPage() {
   const dias = data?.grade_tecnicos.dias || [];
   const evo = data?.evolucao_mensal || [];
   const maxEvo = Math.max(1, ...evo.map((d) => d.recolhas));
-  const cidadeMeses = ["AGO", "SET", "OUT", "NOV"] as const;
+  const cidadeMeses = [
+    "JAN",
+    "FEV",
+    "MAR",
+    "ABR",
+    "MAI",
+    "JUN",
+    "JUL",
+    "AGO",
+    "SET",
+    "OUT",
+    "NOV",
+    "DEZ",
+  ] as const;
+  const tipos = data?.por_tipo_servico || [];
 
   return (
     <div className="painel-page">
@@ -268,10 +282,36 @@ export default function PainelPage() {
                 value={mes}
                 onChange={(e) => setMes(e.target.value)}
               >
-                <option value="2026-08">Ago/2026</option>
-                <option value="2026-09">Set/2026</option>
-                <option value="2026-10">Out/2026</option>
-                <option value="2026-11">Nov/2026</option>
+                {[
+                  ["2025-01", "Jan/2025"],
+                  ["2025-02", "Fev/2025"],
+                  ["2025-03", "Mar/2025"],
+                  ["2025-04", "Abr/2025"],
+                  ["2025-05", "Mai/2025"],
+                  ["2025-06", "Jun/2025"],
+                  ["2025-07", "Jul/2025"],
+                  ["2025-08", "Ago/2025"],
+                  ["2025-09", "Set/2025"],
+                  ["2025-10", "Out/2025"],
+                  ["2025-11", "Nov/2025"],
+                  ["2025-12", "Dez/2025"],
+                  ["2026-01", "Jan/2026"],
+                  ["2026-02", "Fev/2026"],
+                  ["2026-03", "Mar/2026"],
+                  ["2026-04", "Abr/2026"],
+                  ["2026-05", "Mai/2026"],
+                  ["2026-06", "Jun/2026"],
+                  ["2026-07", "Jul/2026"],
+                  ["2026-08", "Ago/2026"],
+                  ["2026-09", "Set/2026"],
+                  ["2026-10", "Out/2026"],
+                  ["2026-11", "Nov/2026"],
+                  ["2026-12", "Dez/2026"],
+                ].map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
             <button
@@ -321,6 +361,36 @@ export default function PainelPage() {
                 {kpis ? pctLabel(kpis.pct_entregue) : "—"}
               </div>
             </article>
+          </section>
+
+          <section className="painel-block" aria-labelledby="servico-title">
+            <div className="painel-block-head">
+              <h2 id="servico-title">Por tipo de serviço</h2>
+              <span>
+                {monthLabel(mes)} · Respostas col. SERVIÇO
+              </span>
+            </div>
+            <div style={{ padding: "1rem" }}>
+              <div className="servico-grid" aria-label="Contagem por tipo">
+                {(tipos.length
+                  ? tipos
+                  : [
+                      { tipo: "DESCONEXÃO", quantidade: 0 },
+                      { tipo: "RETIRADA", quantidade: 0 },
+                      { tipo: "INSTALAÇÃO", quantidade: 0 },
+                      { tipo: "TROCA PACOTE/TECNOLOGIA", quantidade: 0 },
+                    ]
+                ).map((t, i) => (
+                  <article
+                    className={`servico-card reveal reveal-delay-${Math.min(i, 3)}`}
+                    key={t.tipo}
+                  >
+                    <div className="kpi-label">{t.tipo}</div>
+                    <div className="kpi-value">{t.quantidade}</div>
+                  </article>
+                ))}
+              </div>
+            </div>
           </section>
 
           <section className="painel-block" aria-labelledby="grade-title">

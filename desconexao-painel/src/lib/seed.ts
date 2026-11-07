@@ -1,5 +1,6 @@
 import { sql } from "./db";
 import { buildFixturePayload } from "./fixture";
+import { parseMesParam } from "./servico";
 import {
   EMPRESA_SEED_ID,
   NOME_PUBLICO,
@@ -9,10 +10,13 @@ import {
 
 let empresaReady = false;
 
+function defaultMes(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export async function ensureSeed(mes?: string): Promise<void> {
-  const currentMes =
-    mes ||
-    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+  const currentMes = parseMesParam(mes || "") ? (mes as string) : defaultMes();
 
   if (!empresaReady) {
     await sql(

@@ -30,6 +30,8 @@ export type PainelPayload = {
     total: number;
   }>;
   evolucao_mensal: Array<{ mes: string; recolhas: number }>;
+  /** Contagens do mês a partir de Respostas col. SERVIÇO (L). */
+  por_tipo_servico: Array<{ tipo: string; quantidade: number }>;
   a_pagar: Array<{
     tecnico: string;
     codigo: string;
