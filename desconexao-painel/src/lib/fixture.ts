@@ -38,7 +38,7 @@ export function buildFixturePayload(
     status: "aguardando_credencial_sheets",
     mensagem:
       mensagem ||
-      "Amostra local — sync Sheets ainda não ativo. Corrija GOOGLE_SERVICE_ACCOUNT_JSON e compartilhe a planilha como Leitor.",
+      "Amostra local — sync Sheets ainda não ativo. Corrija GOOGLE_SERVICE_ACCOUNT_JSON_V2 e compartilhe a planilha como Leitor.",
     kpis: {
       recolhidos: 0,
       entregues: 0,

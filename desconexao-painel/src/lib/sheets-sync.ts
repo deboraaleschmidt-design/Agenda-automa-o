@@ -1,7 +1,11 @@
 import { google } from "googleapis";
 import { sql } from "./db";
 import { buildFixturePayload } from "./fixture";
-import { inspectServiceAccountJson } from "./sheets-creds";
+import {
+  inspectServiceAccountJson,
+  readServiceAccountJsonEnv,
+  SHEETS_SA_SECRET_NAME,
+} from "./sheets-creds";
 import {
   countsToList,
   emptyServicoCounts,
@@ -36,9 +40,7 @@ export async function syncPainelSnapshot(mes: string): Promise<SyncResult> {
     return { payload, usedFixture: true };
   }
 
-  const inspected = inspectServiceAccountJson(
-    process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
-  );
+  const inspected = inspectServiceAccountJson(readServiceAccountJsonEnv());
   if (!inspected.ok || !inspected.parsed) {
     const payload = buildFixturePayload(mes, inspected.reason);
     await upsertSnapshot(payload);
@@ -81,17 +83,17 @@ function humanizeSheetsError(error: unknown): string {
     lower.includes("decoder") ||
     lower.includes("decrypt")
   ) {
-    return "JSON da service account inválido ou chave corrompida. Em My Secrets, edite GOOGLE_SERVICE_ACCOUNT_JSON e cole de novo o arquivo .json completo.";
+    return `JSON da service account inválido ou chave corrompida. Em My Secrets, edite ${SHEETS_SA_SECRET_NAME} e cole de novo o arquivo .json completo.`;
   }
   if (lower.includes("sheets.googleapis.com") && lower.includes("has not been used")) {
     return "Ative a Google Sheets API no projeto n8n-integracao (APIs e serviços → Biblioteca).";
   }
-  return "Não foi possível ler a planilha agora. Confira compartilhamento com a service account, Sheets API ativa e o JSON em My Secrets; aguarde 1 minuto e clique Sincronizar uma vez.";
+  return `Não foi possível ler a planilha agora. Confira compartilhamento com a service account, Sheets API ativa e ${SHEETS_SA_SECRET_NAME} em My Secrets; aguarde 1 minuto e clique Sincronizar uma vez.`;
 }
 
 function inspectedEmailHint(): string {
   try {
-    const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() || "";
+    const raw = readServiceAccountJsonEnv()?.trim() || "";
     const email = (JSON.parse(raw) as { client_email?: string }).client_email;
     return email || "o e-mail …@….iam.gserviceaccount.com";
   } catch {

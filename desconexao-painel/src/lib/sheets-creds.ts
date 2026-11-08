@@ -1,4 +1,8 @@
-/** Validate GOOGLE_SERVICE_ACCOUNT_JSON without logging its contents. */
+/**
+ * Validate Google SA JSON without logging contents.
+ * Runtime env name (V2 only — no fallback to GOOGLE_SERVICE_ACCOUNT_JSON).
+ */
+export const SHEETS_SA_SECRET_NAME = "GOOGLE_SERVICE_ACCOUNT_JSON_V2" as const;
 
 export type CredsShape =
   | "empty"
@@ -10,8 +14,13 @@ export type CredsShape =
 
 export type CredsLengthClass = "empty" | "short" | "long";
 
+/** Read only V2. Never falls back to GOOGLE_SERVICE_ACCOUNT_JSON. */
+export function readServiceAccountJsonEnv(): string | undefined {
+  return process.env.GOOGLE_SERVICE_ACCOUNT_JSON_V2;
+}
+
 const PLACEHOLDER_REASONS =
-  'Valor de GOOGLE_SERVICE_ACCOUNT_JSON inválido (ex.: "Not now"). Em My Secrets: Delete esse secret → Add Secrets com o mesmo nome → cole o JSON que começa com { → salve → confirme o Publish do app (o valor só entra no deploy) → Sincronizar uma vez.';
+  `Valor de ${SHEETS_SA_SECRET_NAME} inválido (ex.: "Not now"). Em My Secrets: edite ou recrie ${SHEETS_SA_SECRET_NAME} com o JSON que começa com { → salve → confirme o Publish do app (o valor só entra no deploy) → Sincronizar uma vez.`;
 
 export function classifyServiceAccountJson(raw: string | undefined): {
   shape: CredsShape;
@@ -64,8 +73,7 @@ export function inspectServiceAccountJson(raw: string | undefined): {
     return {
       ok: false,
       shape: "empty",
-      reason:
-        "Secret GOOGLE_SERVICE_ACCOUNT_JSON vazio. Cole o JSON completo da conta de serviço (arquivo baixado no Google Cloud) e republiche o app.",
+      reason: `Secret ${SHEETS_SA_SECRET_NAME} vazio. Cole o JSON completo da conta de serviço (arquivo baixado no Google Cloud) e republiche o app.`,
     };
   }
 
@@ -81,8 +89,7 @@ export function inspectServiceAccountJson(raw: string | undefined): {
     return {
       ok: false,
       shape: "invalid_json",
-      reason:
-        "GOOGLE_SERVICE_ACCOUNT_JSON não é um JSON válido. Cole o conteúdo inteiro do arquivo .json da conta de serviço e republiche o app.",
+      reason: `${SHEETS_SA_SECRET_NAME} não é um JSON válido. Cole o conteúdo inteiro do arquivo .json da conta de serviço e republiche o app.`,
     };
   }
 
@@ -112,8 +119,7 @@ export function inspectServiceAccountJson(raw: string | undefined): {
     return {
       ok: false,
       shape: "invalid_json",
-      reason:
-        "GOOGLE_SERVICE_ACCOUNT_JSON não é um JSON válido. Cole o conteúdo inteiro do arquivo .json da conta de serviço e republiche o app.",
+      reason: `${SHEETS_SA_SECRET_NAME} não é um JSON válido. Cole o conteúdo inteiro do arquivo .json da conta de serviço e republiche o app.`,
     };
   }
 }

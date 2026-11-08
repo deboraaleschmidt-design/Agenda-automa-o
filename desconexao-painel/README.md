@@ -14,7 +14,7 @@ Abrir http://127.0.0.1:3000/painel e digitar `dev-local-token` (só quando `PAIN
 ## Secrets (publish-app)
 
 - `PAINEL_API_TOKEN` — **obrigatório em produção** (sem fallback)
-- `GOOGLE_SERVICE_ACCOUNT_JSON` — service account (leitura)
+- `GOOGLE_SERVICE_ACCOUNT_JSON_V2` — service account (leitura; sem fallback para o nome antigo)
 - `GOOGLE_SHEETS_ID` — opcional
 
 ## Endpoints
