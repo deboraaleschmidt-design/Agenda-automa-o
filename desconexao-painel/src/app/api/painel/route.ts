@@ -2,7 +2,7 @@ import { requirePainelToken } from "../../../lib/auth";
 import { sql } from "../../../lib/db";
 import { clientKey, rateLimit } from "../../../lib/rate-limit";
 import { ensureSeed } from "../../../lib/seed";
-import { parseMesParam } from "../../../lib/servico";
+import { isMesOrTotal } from "../../../lib/painel-parse";
 import { syncPainelSnapshot } from "../../../lib/sheets-sync";
 import {
   EMPRESA_SEED_ID,
@@ -26,9 +26,12 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const rawMes = url.searchParams.get("mes")?.trim() || currentMes();
-  if (!parseMesParam(rawMes)) {
+  if (!isMesOrTotal(rawMes)) {
     return Response.json(
-      { error: "bad_request", message: "Parâmetro mes inválido. Use YYYY-MM." },
+      {
+        error: "bad_request",
+        message: "Parâmetro mes inválido. Use YYYY-MM ou TOTAL.",
+      },
       { status: 400 },
     );
   }
