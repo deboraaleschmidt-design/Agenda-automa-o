@@ -1,6 +1,6 @@
 import { sql } from "./db";
 import { buildFixturePayload } from "./fixture";
-import { parseMesParam } from "./servico";
+import { isMesOrTotal } from "./painel-parse";
 import {
   EMPRESA_SEED_ID,
   NOME_PUBLICO,
@@ -16,7 +16,7 @@ function defaultMes(): string {
 }
 
 export async function ensureSeed(mes?: string): Promise<void> {
-  const currentMes = parseMesParam(mes || "") ? (mes as string) : defaultMes();
+  const currentMes = isMesOrTotal(mes || "") ? (mes as string) : defaultMes();
 
   if (!empresaReady) {
     await sql(

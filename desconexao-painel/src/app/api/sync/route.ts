@@ -1,7 +1,7 @@
 import { requirePainelToken } from "../../../lib/auth";
 import { clientKey, rateLimit } from "../../../lib/rate-limit";
 import { ensureSeed } from "../../../lib/seed";
-import { parseMesParam } from "../../../lib/servico";
+import { isMesOrTotal } from "../../../lib/painel-parse";
 import {
   classifyServiceAccountJson,
   readServiceAccountJsonEnv,
@@ -41,9 +41,12 @@ export async function POST(request: Request) {
     /* empty body ok */
   }
 
-  if (!parseMesParam(mes)) {
+  if (!isMesOrTotal(mes)) {
     return Response.json(
-      { error: "bad_request", message: "Parâmetro mes inválido. Use YYYY-MM." },
+      {
+        error: "bad_request",
+        message: "Parâmetro mes inválido. Use YYYY-MM ou TOTAL.",
+      },
       { status: 400 },
     );
   }
