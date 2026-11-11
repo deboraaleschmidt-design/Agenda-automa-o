@@ -9,10 +9,34 @@ if (url === "" || files.length === 0) {
   console.log("migrate: nothing to do");
   process.exit(0);
 }
-const client = new pg.Client({
-  connectionString: process.env.DATABASE_URL_UNPOOLED?.trim() || url,
-});
-await client.connect();
+
+const connectionString = process.env.DATABASE_URL_UNPOOLED?.trim() || url;
+
+async function connectWithRetry(attempts = 6) {
+  let lastError;
+  for (let i = 1; i <= attempts; i++) {
+    const client = new pg.Client({ connectionString, connectionTimeoutMillis: 15_000 });
+    try {
+      await client.connect();
+      return client;
+    } catch (error) {
+      lastError = error;
+      try {
+        await client.end().catch(() => {});
+      } catch {
+        /* ignore */
+      }
+      const waitMs = Math.min(1000 * 2 ** (i - 1), 16_000);
+      console.warn(
+        `migrate: connect failed (attempt ${i}/${attempts}): ${error?.code || error?.message || error}; retry in ${waitMs}ms`,
+      );
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+  throw lastError;
+}
+
+const client = await connectWithRetry();
 try {
   await client.query("set lock_timeout = '60s'");
   await client.query("select pg_advisory_lock(7272741)");
@@ -38,6 +62,7 @@ try {
       throw error;
     }
   }
+  console.log("migrate: ok");
 } finally {
   await client.end();
 }
