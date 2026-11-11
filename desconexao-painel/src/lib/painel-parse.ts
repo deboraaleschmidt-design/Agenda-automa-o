@@ -1,13 +1,20 @@
 import {
   countsToList,
+  dayFromCell,
   emptyServicoCounts,
   mapRespostasHeader,
+  mapTecnicoCodigo,
   monthKeyFromCell,
   normalizeServico,
   parseMesParam,
   type ContagemServico,
 } from "./servico";
-import { MONTH_KEYS, TECH_LABELS, type PainelKpis } from "./types";
+import {
+  MONTH_KEYS,
+  TECH_LABELS,
+  type GradeColuna,
+  type PainelKpis,
+} from "./types";
 
 const TECH_ORDER = ["Z698465", "Z698466", "SMA", "TCI"] as const;
 
@@ -165,29 +172,12 @@ export function parseCidadesFromPainel(rows: unknown[][]): {
     }
   }
 
-  const evolucao_mensal: Array<{ mes: string; recolhas: number }> = [];
-  let inEvo = false;
-  for (const row of rows) {
-    const a = upper(row, 0);
-    if (a.includes("EVOLU")) {
-      inEvo = true;
-      continue;
-    }
-    if (!inEvo) continue;
-    if (a === "MÊS" || a === "MES") continue;
-    if (!a) continue;
-    evolucao_mensal.push({ mes: a.slice(0, 3), recolhas: num(row?.[1]) });
-  }
-  if (evolucao_mensal.length === 0) {
-    for (let i = 0; i < 12; i++) {
-      const k = MONTH_KEYS[i];
-      const recolhas = por_cidade_mes.reduce(
-        (sum, c) => sum + (c.meses[k] || 0),
-        0,
-      );
-      evolucao_mensal.push({ mes: k, recolhas });
-    }
-  }
+  // Sempre JAN–DEZ a partir da grade cidade (evita lixo TOT/LIN/462 do bloco EVOLUÇÃO).
+  const evolucao_mensal: Array<{ mes: string; recolhas: number }> =
+    MONTH_KEYS.map((k) => ({
+      mes: k,
+      recolhas: por_cidade_mes.reduce((sum, c) => sum + (c.meses[k] || 0), 0),
+    }));
 
   return { por_cidade_mes, evolucao_mensal };
 }
@@ -374,4 +364,111 @@ export function isMesOrTotal(mes: string): boolean {
   const t = mes.trim();
   if (t.toUpperCase() === "TOTAL") return true;
   return !!parseMesParam(t);
+}
+
+function sheetGradeMonthKey(tituloMes: string): string | null {
+  const u = tituloMes
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  const full = [
+    "JANEIRO",
+    "FEVEREIRO",
+    "MARCO",
+    "ABRIL",
+    "MAIO",
+    "JUNHO",
+    "JULHO",
+    "AGOSTO",
+    "SETEMBRO",
+    "OUTUBRO",
+    "NOVEMBRO",
+    "DEZEMBRO",
+  ];
+  for (let i = 0; i < MONTH_KEYS.length; i++) {
+    if (u.includes(MONTH_KEYS[i]) || u.includes(full[i])) {
+      const ys = u.match(/20\d{2}/);
+      const y = ys ? parseInt(ys[0], 10) : 2026;
+      return `${y}-${String(i + 1).padStart(2, "0")}`;
+    }
+  }
+  return null;
+}
+
+/** Grade dia×técnico do mês: PAINEL se o título bate; senão Respostas. TOTAL = vazia. */
+export function resolveGradeForMes(
+  painelRows: unknown[][],
+  respostas: unknown[][],
+  mes: string,
+): {
+  colunas: GradeColuna[];
+  dias: number[][];
+  tituloMes: string;
+  fonteGrade: "painel" | "respostas" | "none";
+} {
+  const colunas = TECH_ORDER.map((codigo) => ({
+    nome: TECH_LABELS[codigo] || codigo,
+    codigo,
+  }));
+  if (mes.trim().toUpperCase() === "TOTAL") {
+    return {
+      colunas,
+      dias: [],
+      tituloMes: "TOTAL — escolha um mês para a grade dia × técnico",
+      fonteGrade: "none",
+    };
+  }
+
+  const fromPainel = parseGradeFromPainel(painelRows);
+  const sheetMes = sheetGradeMonthKey(fromPainel.tituloMes);
+  if (sheetMes && sheetMes === mes.trim() && fromPainel.dias.length > 0) {
+    return { ...fromPainel, fonteGrade: "painel" };
+  }
+
+  const fromResp = buildGradeFromRespostas(respostas, mes);
+  return {
+    colunas,
+    dias: fromResp,
+    tituloMes: fromResp.length
+      ? `Respostas · ${mes}`
+      : `Sem dias em Respostas para ${mes}`,
+    fonteGrade: fromResp.length ? "respostas" : "none",
+  };
+}
+
+export function buildGradeFromRespostas(
+  respostas: unknown[][],
+  mes: string,
+): number[][] {
+  const headerIdx = findRespostasHeaderIndex(respostas);
+  if (headerIdx < 0 || !isMesOrTotal(mes) || mes.trim().toUpperCase() === "TOTAL") {
+    return [];
+  }
+  const map = mapRespostasHeader(respostas[headerIdx] || []);
+  const byDay: Record<number, Record<string, number>> = {};
+
+  for (let i = headerIdx + 1; i < respostas.length; i++) {
+    const row = respostas[i] || [];
+    if (map.serial >= 0 && !String(row[map.serial] || "").trim()) continue;
+    const mk = rowMonthKey(map, row);
+    if (!rowMatchesMes(mk, mes)) continue;
+    const code = mapTecnicoCodigo(
+      map.tecnico >= 0 ? row[map.tecnico] : undefined,
+    );
+    if (!code) continue;
+    const dataVal = map.data >= 0 ? row[map.data] : undefined;
+    const tsVal = map.ts >= 0 ? row[map.ts] : undefined;
+    const day = dayFromCell(dataVal) ?? dayFromCell(tsVal);
+    if (!day || day < 1 || day > 31) continue;
+    byDay[day] ??= {};
+    byDay[day][code] = (byDay[day][code] || 0) + 1;
+  }
+
+  return Object.keys(byDay)
+    .map((d) => Number(d))
+    .sort((a, b) => a - b)
+    .map((day) => [
+      day,
+      ...TECH_ORDER.map((c) => byDay[day][c] || 0),
+    ]);
 }

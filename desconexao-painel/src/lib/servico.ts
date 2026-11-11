@@ -136,6 +136,7 @@ export function mapRespostasHeader(head: unknown[]): {
   servico: number;
   data: number;
   statusEntrega: number;
+  tecnico: number;
 } {
   const norm = (s: unknown) =>
     String(s || "")
@@ -180,6 +181,20 @@ export function mapRespostasHeader(head: unknown[]): {
       break;
     }
   }
+  let tecnico = -1;
+  for (let c = 0; c < head.length; c++) {
+    const h = norm(head[c]);
+    if (
+      h.indexOf("TECNICO QUE COLETOU") >= 0 ||
+      h.indexOf("TÉCNICO QUE COLETOU") >= 0 ||
+      (h.indexOf("TECNICO") >= 0 && h.indexOf("COLETOU") >= 0)
+    ) {
+      tecnico = c;
+      break;
+    }
+  }
+  if (tecnico < 0) tecnico = idx(["TECNICO", "TÉCNICO"]);
+
   return {
     period: idx(["FATURAR"]) >= 0 ? idx(["FATURAR"]) : 0,
     ts: idx(["CARIMBO", "DATA/HORA"]),
@@ -187,5 +202,38 @@ export function mapRespostasHeader(head: unknown[]): {
     servico: idx(["SERVIÇO", "SERVICO"]),
     data: dataIdx,
     statusEntrega,
+    tecnico,
   };
+}
+
+/** Map Respostas tech name → PAINEL code (Guilherme/Alexandre/Valter/TCI). */
+export function mapTecnicoCodigo(raw: unknown): string | null {
+  const u = String(raw || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .trim();
+  if (!u) return null;
+  if (u === "TCI" || u.startsWith("TCI ")) return "TCI";
+  if (u.includes("GUILHERME")) return "Z698465";
+  if (u.includes("ALEXANDRE")) return "Z698466";
+  if (u.includes("VALTER") || u.includes("SMA")) return "SMA";
+  return null;
+}
+
+export function dayFromCell(data: unknown): number | null {
+  if (data instanceof Date && !Number.isNaN(data.getTime())) {
+    return data.getDate();
+  }
+  if (typeof data === "number" && Number.isFinite(data)) {
+    const epoch = Date.UTC(1899, 11, 30);
+    const d = new Date(epoch + data * 86400000);
+    if (!Number.isNaN(d.getTime())) return d.getUTCDate();
+  }
+  const s = String(data || "").trim();
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (m) return parseInt(m[1], 10);
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return parseInt(iso[3], 10);
+  return null;
 }

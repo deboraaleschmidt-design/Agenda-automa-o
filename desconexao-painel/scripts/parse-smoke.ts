@@ -10,6 +10,7 @@ import {
   parseGradeFromPainel,
   parseKpisFromPainel,
   recolhidosOficiaisNoMes,
+  resolveGradeForMes,
   resolveKpisForMes,
 } from "../src/lib/painel-parse";
 
@@ -110,7 +111,7 @@ const respostas: unknown[][] = [
     "CONTRATO",
     "SERIAL",
     "FOTO",
-    "TECNICO",
+    "TECNICO QUE COLETOU/ENTREGOU",
     "NOME",
     "CIDADE",
     "AGENDAMENTO",
@@ -128,7 +129,7 @@ const respostas: unknown[][] = [
     "1",
     "ABC123",
     "",
-    "X",
+    "GUILHERME BECKER",
     "",
     "POA",
     "",
@@ -146,7 +147,7 @@ const respostas: unknown[][] = [
     "2",
     "DEF456",
     "",
-    "X",
+    "VALTER BECKER",
     "",
     "POA",
     "",
@@ -164,7 +165,7 @@ const respostas: unknown[][] = [
     "3",
     "GHI789",
     "",
-    "X",
+    "TCI",
     "",
     "POA",
     "",
@@ -182,7 +183,7 @@ const respostas: unknown[][] = [
     "4",
     "OUT001",
     "",
-    "X",
+    "ALEXANDRE DE JESUS",
     "",
     "POA",
     "",
@@ -200,7 +201,7 @@ const respostas: unknown[][] = [
     "5",
     "OUT002",
     "",
-    "X",
+    "GUILHERME BECKER",
     "",
     "POA",
     "",
@@ -235,6 +236,12 @@ if (sums.reduce((a, b) => a + b, 0) !== 84) fail("grade total");
 
 const cities = parseCidadesFromPainel(painelRows);
 if (cities.por_cidade_mes[0]?.cidade !== "SANTA MARIA") fail("city0");
+if (cities.evolucao_mensal.length !== 12) {
+  fail(`evo len=${cities.evolucao_mensal.length}`);
+}
+if (cities.evolucao_mensal.some((e) => !/^(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)$/.test(e.mes))) {
+  fail("evo junk labels");
+}
 
 if (findRespostasHeaderIndex(respostas) !== 1) fail("header idx");
 const nov = aggregateServicos(respostas, "2026-11");
@@ -268,6 +275,12 @@ if (kpisOut.recolhidos !== 296) fail(`kpi out recolhidos=${kpisOut.recolhidos}`)
 if (kpisOut.entregues !== 148) fail(`kpi out entregues=${kpisOut.entregues}`);
 if (kpisOut.em_processo !== 148) fail(`kpi out processo=${kpisOut.em_processo}`);
 
+const gradeOut = resolveGradeForMes(painelRows, respostas, "2026-10");
+if (gradeOut.fonteGrade !== "respostas") fail(`gradeOut fonte=${gradeOut.fonteGrade}`);
+if (gradeOut.dias.length !== 2) fail(`gradeOut dias=${gradeOut.dias.length}`);
+const gradeNov = resolveGradeForMes(painelRows, respostas, "2026-11");
+if (gradeNov.fonteGrade !== "painel") fail(`gradeNov fonte=${gradeNov.fonteGrade}`);
+
 console.log("parse-smoke OK", {
   kpis,
   sums,
@@ -275,4 +288,5 @@ console.log("parse-smoke OK", {
   tiposOut: outTipos,
   tiposTotal: total,
   kpisOut,
+  gradeOut: gradeOut.dias,
 });

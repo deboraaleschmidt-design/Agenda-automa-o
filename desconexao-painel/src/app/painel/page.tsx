@@ -236,8 +236,6 @@ export default function PainelPage() {
   const kpis = data?.kpis;
   const colunas = data?.grade_tecnicos.colunas || [];
   const dias = data?.grade_tecnicos.dias || [];
-  const evo = data?.evolucao_mensal || [];
-  const maxEvo = Math.max(1, ...evo.map((d) => d.recolhas));
   const cidadeMeses = [
     "JAN",
     "FEV",
@@ -252,6 +250,14 @@ export default function PainelPage() {
     "NOV",
     "DEZ",
   ] as const;
+  const evoByMes = new Map(
+    (data?.evolucao_mensal || []).map((d) => [d.mes, d.recolhas]),
+  );
+  const evoJanDez = cidadeMeses.map((m) => ({
+    mes: m,
+    recolhas: evoByMes.get(m) ?? 0,
+  }));
+  const maxEvo = Math.max(1, ...evoJanDez.map((d) => d.recolhas));
   const tipos = data?.por_tipo_servico || [];
 
   return (
@@ -399,111 +405,149 @@ export default function PainelPage() {
               <span>{monthLabel(mes)} · dia × técnico</span>
             </div>
             <div className="table-wrap">
-              <table className="data">
+              {dias.length === 0 ? (
+                <p className="painel-foot" style={{ padding: "1rem" }}>
+                  Sem grade dia × técnico para {monthLabel(mes)}. Escolha um mês
+                  com recolhas (Guilherme / Alexandre / Valter / TCI).
+                </p>
+              ) : (
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>Dia</th>
+                      {colunas.map((c) => (
+                        <th key={c.codigo}>
+                          {c.nome}
+                          <span className="sub">{c.codigo}</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dias.map((row) => {
+                      const [day, ...counts] = row;
+                      return (
+                        <tr key={day}>
+                          <td>{String(day).padStart(2, "0")}</td>
+                          {counts.map((n, i) => (
+                            <td key={`${day}-${i}`}>{n}</td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td>TOTAL</td>
+                      {colunas.map((_, i) => {
+                        const sum = dias.reduce(
+                          (acc, row) => acc + (row[i + 1] || 0),
+                          0,
+                        );
+                        return <td key={`t-${i}`}>{sum}</td>;
+                      })}
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+            </div>
+          </section>
+
+          <section className="painel-block" aria-labelledby="cidade-title">
+            <div className="painel-block-head">
+              <h2 id="cidade-title">Por cidade × mês</h2>
+              <span>Recolhas · com TOTAL</span>
+            </div>
+            <div className="table-wrap table-wrap-cidade">
+              <table className="data compact cidade-mes">
                 <thead>
                   <tr>
-                    <th>Dia</th>
-                    {colunas.map((c) => (
-                      <th key={c.codigo}>
-                        {c.nome}
-                        <span className="sub">{c.codigo}</span>
-                      </th>
+                    <th>Cidade</th>
+                    {cidadeMeses.map((m) => (
+                      <th key={m}>{m}</th>
                     ))}
+                    <th>TOTAL</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dias.map((row) => {
-                    const [day, ...counts] = row;
-                    return (
-                      <tr key={day}>
-                        <td>{String(day).padStart(2, "0")}</td>
-                        {counts.map((n, i) => (
-                          <td key={`${day}-${i}`}>{n}</td>
-                        ))}
-                      </tr>
-                    );
-                  })}
+                  {(data?.por_cidade_mes || []).map((c) => (
+                    <tr key={c.cidade}>
+                      <td>{c.cidade}</td>
+                      {cidadeMeses.map((m) => (
+                        <td key={m}>{c.meses[m] ?? 0}</td>
+                      ))}
+                      <td>
+                        {c.total ||
+                          cidadeMeses.reduce(
+                            (s, m) => s + (c.meses[m] ?? 0),
+                            0,
+                          )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr>
                     <td>TOTAL</td>
-                    {colunas.map((_, i) => {
-                      const sum = dias.reduce(
-                        (acc, row) => acc + (row[i + 1] || 0),
+                    {cidadeMeses.map((m) => (
+                      <td key={`t-${m}`}>
+                        {(data?.por_cidade_mes || []).reduce(
+                          (s, c) => s + (c.meses[m] ?? 0),
+                          0,
+                        )}
+                      </td>
+                    ))}
+                    <td>
+                      {(data?.por_cidade_mes || []).reduce(
+                        (s, c) =>
+                          s +
+                          (c.total ||
+                            cidadeMeses.reduce(
+                              (a, m) => a + (c.meses[m] ?? 0),
+                              0,
+                            )),
                         0,
-                      );
-                      return <td key={`t-${i}`}>{sum}</td>;
-                    })}
+                      )}
+                    </td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           </section>
 
-          <div className="split-row">
-            <section className="painel-block" aria-labelledby="cidade-title">
-              <div className="painel-block-head">
-                <h2 id="cidade-title">Por cidade × mês</h2>
-                <span>Recolhas</span>
-              </div>
-              <div className="table-wrap">
-                <table className="data compact">
-                  <thead>
-                    <tr>
-                      <th>Cidade</th>
-                      {cidadeMeses.map((m) => (
-                        <th key={m}>{m}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(data?.por_cidade_mes || []).map((c) => (
-                      <tr key={c.cidade}>
-                        <td>{c.cidade}</td>
-                        {cidadeMeses.map((m) => (
-                          <td key={m}>{c.meses[m] ?? 0}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="painel-block" aria-labelledby="evo-title">
-              <div className="painel-block-head">
-                <h2 id="evo-title">Evolução mensal</h2>
-                <span>Recolhas</span>
-              </div>
-              <div className="chart" aria-label="Gráfico de barras">
-                <div className="chart-plot">
-                  {evo.map((d, i) => {
-                    const h = Math.max(
-                      8,
-                      Math.round((d.recolhas / maxEvo) * 100),
-                    );
-                    return (
-                      <div className="chart-col" key={`${d.mes}-${i}`}>
-                        <div className="chart-bar-wrap">
-                          <div
-                            className="chart-bar"
-                            style={{
-                              height: `${h}%`,
-                              animationDelay: `${0.08 + i * 0.08}s`,
-                            }}
-                          >
-                            <span className="chart-bar-value">{d.recolhas}</span>
-                          </div>
+          <section className="painel-block" aria-labelledby="evo-title">
+            <div className="painel-block-head">
+              <h2 id="evo-title">Evolução mensal</h2>
+              <span>Recolhas · JAN–DEZ</span>
+            </div>
+            <div className="chart chart-full" aria-label="Gráfico de barras">
+              <div className="chart-plot chart-plot-12">
+                {evoJanDez.map((d, i) => {
+                  const h = Math.max(
+                    8,
+                    Math.round((d.recolhas / maxEvo) * 100),
+                  );
+                  return (
+                    <div className="chart-col" key={d.mes}>
+                      <div className="chart-bar-wrap">
+                        <div
+                          className="chart-bar"
+                          style={{
+                            height: `${h}%`,
+                            animationDelay: `${0.08 + i * 0.06}s`,
+                          }}
+                        >
+                          <span className="chart-bar-value">{d.recolhas}</span>
                         </div>
-                        <span className="chart-label">{d.mes}</span>
                       </div>
-                    );
-                  })}
-                </div>
-                <p className="chart-legend">MÊS / RECOLHAS</p>
+                      <span className="chart-label">{d.mes}</span>
+                    </div>
+                  );
+                })}
               </div>
-            </section>
-          </div>
+              <p className="chart-legend">MÊS / RECOLHAS (sem acumulados extras)</p>
+            </div>
+          </section>
 
           <div className="painel-foot">
             <p>
