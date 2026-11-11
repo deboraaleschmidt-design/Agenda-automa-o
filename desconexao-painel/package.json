@@ -1,0 +1,24 @@
+{
+  "name": "desconexao-painel",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build && node scripts/migrate.mjs",
+    "start": "next start -p ${PORT:-3000}",
+    "migrate": "node scripts/migrate.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.3.14",
+    "googleapis": "^164.1.0",
+    "next": "^15.5.6",
+    "pg": "^8.16.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.9.3",
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.15.6",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2"
+  }
+}

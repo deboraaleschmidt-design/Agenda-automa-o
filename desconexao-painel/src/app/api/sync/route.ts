@@ -1,0 +1,72 @@
+import { requirePainelToken } from "../../../lib/auth";
+import { clientKey, rateLimit } from "../../../lib/rate-limit";
+import { ensureSeed } from "../../../lib/seed";
+import { isMesOrTotal } from "../../../lib/painel-parse";
+import {
+  classifyServiceAccountJson,
+  readServiceAccountJsonEnv,
+} from "../../../lib/sheets-creds";
+import { syncPainelSnapshot } from "../../../lib/sheets-sync";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const SYNC_LIMIT = 12;
+const SYNC_WINDOW_MS = 5 * 60 * 1000;
+
+function currentMes(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export async function POST(request: Request) {
+  const denied = requirePainelToken(request);
+  if (denied) return denied;
+
+  const limited = rateLimit(
+    `sync:${clientKey(request)}`,
+    SYNC_LIMIT,
+    SYNC_WINDOW_MS,
+  );
+  if (limited) return limited;
+
+  const url = new URL(request.url);
+  let mes = url.searchParams.get("mes")?.trim() || currentMes();
+  try {
+    const body = (await request.json().catch(() => null)) as
+      | { mes?: string }
+      | null;
+    if (body?.mes) mes = body.mes.trim();
+  } catch {
+    /* empty body ok */
+  }
+
+  if (!isMesOrTotal(mes)) {
+    return Response.json(
+      {
+        error: "bad_request",
+        message: "Parâmetro mes inválido. Use YYYY-MM ou TOTAL.",
+      },
+      { status: 400 },
+    );
+  }
+
+  await ensureSeed(mes);
+  const result = await syncPainelSnapshot(mes);
+
+  // Safe shape only — never echo secret content. V2 env only.
+  const creds = classifyServiceAccountJson(readServiceAccountJsonEnv());
+
+  return Response.json({
+    ok: true,
+    usedFixture: result.usedFixture,
+    mes,
+    status: result.payload.status,
+    fonte: result.payload.fonte,
+    atualizado_em: result.payload.atualizado_em,
+    mensagem: result.payload.mensagem,
+    credsShape: creds.shape,
+    credsStartsWithBrace: creds.startsWithBrace,
+    credsLengthClass: creds.lengthClass,
+  });
+}
