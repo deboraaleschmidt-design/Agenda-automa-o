@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { SESSION_COOKIE, readCookie } from "./auth";
+
 type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
@@ -40,8 +43,30 @@ export function rateLimit(
   return null;
 }
 
+/**
+ * Login attempts: never key off spoofable proxy IP headers, and never off the
+ * submitted token (rotating fake Bearers would bypass the limit). Shared bucket
+ * is correct for this private single-owner panel.
+ */
+export function loginClientKey(): string {
+  return "anon";
+}
+
+/**
+ * Authenticated routes: key by a short hash of Bearer/session credential.
+ * Does NOT trust X-Forwarded-For / X-Real-IP (client-spoofable when forwarded).
+ */
 export function clientKey(request: Request): string {
-  const fwd = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const real = request.headers.get("x-real-ip")?.trim();
-  return fwd || real || "unknown";
+  const header = request.headers.get("authorization") || "";
+  const bearer = header.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? "";
+  const cookie = readCookie(request, SESSION_COOKIE);
+  const material = bearer || cookie;
+  if (material) {
+    const digest = createHash("sha256")
+      .update(material)
+      .digest("hex")
+      .slice(0, 16);
+    return `cred:${digest}`;
+  }
+  return "anon";
 }

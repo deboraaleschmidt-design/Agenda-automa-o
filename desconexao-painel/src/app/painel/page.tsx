@@ -8,20 +8,16 @@ function currentMes(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function money(n: number): string {
-  return n.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 0,
-  });
-}
-
 function pctLabel(n: number): string {
   const v = n <= 1 ? n * 100 : n;
-  return `${Math.round(v)}%`;
+  return `${(Math.round(v * 10) / 10).toLocaleString("pt-BR", {
+    minimumFractionDigits: v % 1 === 0 ? 0 : 1,
+    maximumFractionDigits: 1,
+  })}%`;
 }
 
 function monthLabel(mes: string): string {
+  if (mes.trim().toUpperCase() === "TOTAL") return "TOTAL (desde ago/2026)";
   const [y, m] = mes.split("-");
   const names = [
     "",
@@ -285,6 +281,7 @@ export default function PainelPage() {
                 onChange={(e) => setMes(e.target.value)}
               >
                 {[
+                  ["TOTAL", "TOTAL"],
                   ["2025-01", "Jan/2025"],
                   ["2025-02", "Fev/2025"],
                   ["2025-03", "Mar/2025"],
@@ -506,65 +503,6 @@ export default function PainelPage() {
               </div>
             </section>
           </div>
-
-          <section className="painel-block" aria-labelledby="pagar-title">
-            <div className="painel-block-head">
-              <h2 id="pagar-title">A pagar</h2>
-              <span>{monthLabel(mes)}</span>
-            </div>
-            <div className="table-wrap">
-              <table className="data compact">
-                <thead>
-                  <tr>
-                    <th>Técnico</th>
-                    <th>Volume</th>
-                    <th>Tarifa</th>
-                    <th>A pagar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data?.a_pagar || []).map((r) => (
-                    <tr key={`${r.tecnico}-${r.codigo}`}>
-                      <td>
-                        {r.tecnico}
-                        {r.codigo ? (
-                          <span
-                            className="sub"
-                            style={{
-                              display: "block",
-                              color: "var(--muted)",
-                              fontSize: "0.75rem",
-                            }}
-                          >
-                            {r.codigo}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td>{r.volume}</td>
-                      <td className={r.tarifa === 0 ? "money zero" : "money"}>
-                        {money(r.tarifa)}
-                      </td>
-                      <td className={r.valor === 0 ? "money zero" : "money"}>
-                        {money(r.valor)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="total-row">
-                    <td>TOTAL</td>
-                    <td />
-                    <td />
-                    <td className="money">
-                      {money(
-                        (data?.a_pagar || []).reduce((s, r) => s + r.valor, 0),
-                      )}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </section>
 
           <div className="painel-foot">
             <p>
