@@ -5,7 +5,7 @@ import {
   aggregateServicos,
   isMesOrTotal,
   parseCidadesFromPainel,
-  parseGradeFromPainel,
+  resolveGradeForMes,
   resolveKpisForMes,
 } from "./painel-parse";
 import {
@@ -146,7 +146,7 @@ async function readFromSheets(
   const respostas = ranges[1]?.values || [];
 
   const kpis = resolveKpisForMes(painelRows, respostas, mes);
-  const grade = parseGradeFromPainel(painelRows);
+  const grade = resolveGradeForMes(painelRows, respostas, mes);
   const cidades = parseCidadesFromPainel(painelRows);
   const tipos = aggregateServicos(respostas, mes);
   const mesLabel =
@@ -159,9 +159,7 @@ async function readFromSheets(
     atualizado_em: new Date().toISOString(),
     fonte: "sheets",
     status: "ok",
-    mensagem: grade.tituloMes
-      ? `Mês ${mesLabel} · Grade: ${grade.tituloMes}`
-      : `Mês ${mesLabel}`,
+    mensagem: `Mês ${mesLabel} · Grade: ${grade.tituloMes}`,
     kpis,
     grade_tecnicos: { colunas: grade.colunas, dias: grade.dias },
     por_cidade_mes: cidades.por_cidade_mes,

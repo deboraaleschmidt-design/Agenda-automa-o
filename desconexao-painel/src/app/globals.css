@@ -907,12 +907,36 @@ table.data tfoot td {
 }
 
 table.data.compact {
-  min-width: 480px;
+  min-width: 0;
+}
+
+table.data.cidade-mes {
+  min-width: 0;
+  width: 100%;
+  table-layout: fixed;
+  font-size: 0.72rem;
+}
+
+table.data.cidade-mes th,
+table.data.cidade-mes td {
+  padding: 0.35rem 0.2rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+table.data.cidade-mes th:first-child,
+table.data.cidade-mes td:first-child {
+  width: 18%;
+  white-space: nowrap;
+}
+
+.table-wrap-cidade {
+  overflow-x: visible;
 }
 
 .split-row {
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
+  grid-template-columns: 1fr;
   gap: 1.15rem;
   margin-bottom: 1.15rem;
 }
@@ -920,6 +944,14 @@ table.data.compact {
 .split-row > .painel-block {
   margin-bottom: 0;
   height: 100%;
+}
+
+.chart-full {
+  width: 100%;
+}
+
+.chart-plot-12 {
+  gap: 0.35rem;
 }
 
 .chart {
