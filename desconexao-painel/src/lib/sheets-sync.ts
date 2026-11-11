@@ -6,7 +6,7 @@ import {
   isMesOrTotal,
   parseCidadesFromPainel,
   parseGradeFromPainel,
-  parseKpisFromPainel,
+  resolveKpisForMes,
 } from "./painel-parse";
 import {
   inspectServiceAccountJson,
@@ -145,9 +145,12 @@ async function readFromSheets(
   const painelRows = ranges[0]?.values || [];
   const respostas = ranges[1]?.values || [];
 
-  const kpis = parseKpisFromPainel(painelRows);
+  const kpis = resolveKpisForMes(painelRows, respostas, mes);
   const grade = parseGradeFromPainel(painelRows);
   const cidades = parseCidadesFromPainel(painelRows);
+  const tipos = aggregateServicos(respostas, mes);
+  const mesLabel =
+    mes.trim().toUpperCase() === "TOTAL" ? "TOTAL" : mes;
 
   return {
     empresa: { id: EMPRESA_SEED_ID, nome_publico: NOME_PUBLICO },
@@ -157,13 +160,13 @@ async function readFromSheets(
     fonte: "sheets",
     status: "ok",
     mensagem: grade.tituloMes
-      ? `Grade: ${grade.tituloMes}`
-      : undefined,
+      ? `Mês ${mesLabel} · Grade: ${grade.tituloMes}`
+      : `Mês ${mesLabel}`,
     kpis,
     grade_tecnicos: { colunas: grade.colunas, dias: grade.dias },
     por_cidade_mes: cidades.por_cidade_mes,
     evolucao_mensal: cidades.evolucao_mensal,
-    por_tipo_servico: aggregateServicos(respostas, mes),
+    por_tipo_servico: tipos,
     // Quantidades only on team face — valores R$ ficam fora deste slice.
     a_pagar: [],
   };

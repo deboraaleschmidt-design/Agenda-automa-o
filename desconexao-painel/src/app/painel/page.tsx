@@ -114,7 +114,8 @@ export default function PainelPage() {
   }, []);
 
   useEffect(() => {
-    if (authed && !checking) void load(mes);
+    // refresh=1 força sync do mês escolhido (KPIs/tipos amarrados ao seletor).
+    if (authed && !checking) void load(mes, true);
   }, [authed, checking, mes, load]);
 
   const saveToken = async () => {

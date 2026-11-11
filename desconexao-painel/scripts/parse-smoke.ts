@@ -9,6 +9,8 @@ import {
   parseCidadesFromPainel,
   parseGradeFromPainel,
   parseKpisFromPainel,
+  recolhidosOficiaisNoMes,
+  resolveKpisForMes,
 } from "../src/lib/painel-parse";
 
 const painelRows: unknown[][] = [
@@ -117,6 +119,8 @@ const respostas: unknown[][] = [
     "SERVIÇO",
     "REGIÃO",
     "DATA",
+    "STATUS PG",
+    "STATUS DE ENTREGA",
   ],
   [
     "NOV2026",
@@ -133,6 +137,8 @@ const respostas: unknown[][] = [
     "DESCONEXÃO",
     "",
     "10/11/2026",
+    "PAGO",
+    "ENTREGUE CLARO POA",
   ],
   [
     "AGO2026",
@@ -149,6 +155,8 @@ const respostas: unknown[][] = [
     "RETIRADA",
     "",
     "01/08/2026",
+    "",
+    "",
   ],
   [
     "JUL2026",
@@ -165,6 +173,44 @@ const respostas: unknown[][] = [
     "INSTALAÇÃO",
     "",
     "01/07/2026",
+    "PAGO",
+    "ENTREGUE CLARO POA",
+  ],
+  [
+    "OUT2026",
+    "15/10/2026 12:00",
+    "4",
+    "OUT001",
+    "",
+    "X",
+    "",
+    "POA",
+    "",
+    "",
+    "",
+    "RETIRADA",
+    "",
+    "15/10/2026",
+    "",
+    "EM PROCESSO",
+  ],
+  [
+    "OUT2026",
+    "16/10/2026 12:00",
+    "5",
+    "OUT002",
+    "",
+    "X",
+    "",
+    "POA",
+    "",
+    "",
+    "",
+    "DESCONEXÃO",
+    "",
+    "16/10/2026",
+    "PAGO",
+    "ENTREGUE CLARO POA",
   ],
 ];
 
@@ -195,8 +241,15 @@ const nov = aggregateServicos(respostas, "2026-11");
 if (nov.find((x) => x.tipo === "DESCONEXÃO")?.quantidade !== 1) {
   fail("nov desconexao");
 }
+const outTipos = aggregateServicos(respostas, "2026-10");
+if (outTipos.find((x) => x.tipo === "RETIRADA")?.quantidade !== 1) {
+  fail("out retirada");
+}
+if (outTipos.find((x) => x.tipo === "DESCONEXÃO")?.quantidade !== 1) {
+  fail("out desconexao");
+}
 const total = aggregateServicos(respostas, "TOTAL");
-if (total.find((x) => x.tipo === "RETIRADA")?.quantidade !== 1) {
+if (total.find((x) => x.tipo === "RETIRADA")?.quantidade !== 2) {
   fail("total retirada");
 }
 if ((total.find((x) => x.tipo === "INSTALAÇÃO")?.quantidade || 0) !== 0) {
@@ -206,9 +259,20 @@ if (!isMesOrTotal("TOTAL") || !isMesOrTotal("2026-11") || isMesOrTotal("foo")) {
   fail("isMesOrTotal");
 }
 
+const kpisTotal = resolveKpisForMes(painelRows, respostas, "TOTAL");
+if (kpisTotal.recolhidos !== 1739) fail(`kpi TOTAL=${kpisTotal.recolhidos}`);
+const outRec = recolhidosOficiaisNoMes(painelRows, "2026-10");
+if (outRec !== 296) fail(`out oficiais=${outRec}`);
+const kpisOut = resolveKpisForMes(painelRows, respostas, "2026-10");
+if (kpisOut.recolhidos !== 296) fail(`kpi out recolhidos=${kpisOut.recolhidos}`);
+if (kpisOut.entregues !== 148) fail(`kpi out entregues=${kpisOut.entregues}`);
+if (kpisOut.em_processo !== 148) fail(`kpi out processo=${kpisOut.em_processo}`);
+
 console.log("parse-smoke OK", {
   kpis,
   sums,
   tiposNov: nov,
+  tiposOut: outTipos,
   tiposTotal: total,
+  kpisOut,
 });

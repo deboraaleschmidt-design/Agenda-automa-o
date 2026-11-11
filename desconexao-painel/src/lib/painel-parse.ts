@@ -203,6 +203,150 @@ export function findRespostasHeaderIndex(rows: unknown[][]): number {
 
 const TIPOS_DESDE = { y: 2026, m: 8 } as const;
 
+function rowMonthKey(
+  map: ReturnType<typeof mapRespostasHeader>,
+  row: unknown[],
+): { y: number; m: number } | null {
+  const dataVal = map.data >= 0 ? row[map.data] : undefined;
+  const tsVal = map.ts >= 0 ? row[map.ts] : undefined;
+  const periodVal = map.period >= 0 ? row[map.period] : undefined;
+  return (
+    monthKeyFromCell(dataVal, periodVal) ||
+    monthKeyFromCell(tsVal, periodVal)
+  );
+}
+
+/** Include row for YYYY-MM or TOTAL (tipos/KPIs desde ago/2026). */
+export function rowMatchesMes(
+  mk: { y: number; m: number } | null,
+  mes: string,
+): boolean {
+  if (!mk) return false;
+  const isTotal = mes.trim().toUpperCase() === "TOTAL";
+  if (isTotal) {
+    return !(
+      mk.y < TIPOS_DESDE.y ||
+      (mk.y === TIPOS_DESDE.y && mk.m < TIPOS_DESDE.m)
+    );
+  }
+  const target = parseMesParam(mes);
+  return !!target && mk.y === target.y && mk.m === target.m;
+}
+
+function isEntregueStatus(raw: unknown): boolean {
+  const u = String(raw || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  return u.includes("ENTREGUE");
+}
+
+/** Official monthly recolhas from PAINEL city×mês / evolução (not the header block). */
+export function recolhidosOficiaisNoMes(
+  painelRows: unknown[][],
+  mes: string,
+): number | null {
+  const cidades = parseCidadesFromPainel(painelRows);
+  if (mes.trim().toUpperCase() === "TOTAL") {
+    const fromEvo = cidades.evolucao_mensal.reduce(
+      (s, e) => s + (e.recolhas || 0),
+      0,
+    );
+    if (fromEvo > 0) return fromEvo;
+    const fromCities = cidades.por_cidade_mes.reduce(
+      (s, c) => s + (c.total || 0),
+      0,
+    );
+    return fromCities > 0 ? fromCities : null;
+  }
+  const target = parseMesParam(mes);
+  if (!target) return null;
+  const key = MONTH_KEYS[target.m - 1];
+  const evo = cidades.evolucao_mensal.find((e) => e.mes === key)?.recolhas;
+  if (typeof evo === "number" && evo > 0) return evo;
+  const sum = cidades.por_cidade_mes.reduce(
+    (s, c) => s + (c.meses[key] || 0),
+    0,
+  );
+  return sum > 0 ? sum : 0;
+}
+
+/**
+ * KPIs for the selected month.
+ * TOTAL → cabeçalho PAINEL (totais oficiais da planilha).
+ * YYYY-MM → recolhidos oficiais do mês na grade cidade/evo; entregues/%
+ * a partir de Respostas no mesmo mês (mesma regra dos tipos de serviço).
+ */
+export function resolveKpisForMes(
+  painelRows: unknown[][],
+  respostas: unknown[][],
+  mes: string,
+): PainelKpis {
+  const header = parseKpisFromPainel(painelRows);
+  if (mes.trim().toUpperCase() === "TOTAL") return header;
+
+  const fromResp = aggregateKpisFromRespostas(respostas, mes);
+  const oficiais = recolhidosOficiaisNoMes(painelRows, mes);
+  if (oficiais == null) return fromResp;
+
+  if (fromResp.recolhidos <= 0) {
+    return {
+      recolhidos: oficiais,
+      entregues: 0,
+      em_processo: oficiais,
+      pct_entregue: 0,
+    };
+  }
+  const ratio = fromResp.entregues / fromResp.recolhidos;
+  const entregues = Math.min(
+    oficiais,
+    Math.round(oficiais * ratio),
+  );
+  const em_processo = Math.max(0, oficiais - entregues);
+  return {
+    recolhidos: oficiais,
+    entregues,
+    em_processo,
+    pct_entregue: oficiais > 0 ? entregues / oficiais : 0,
+  };
+}
+
+export function aggregateKpisFromRespostas(
+  respostas: unknown[][],
+  mes: string,
+): PainelKpis {
+  const empty: PainelKpis = {
+    recolhidos: 0,
+    entregues: 0,
+    em_processo: 0,
+    pct_entregue: 0,
+  };
+  const headerIdx = findRespostasHeaderIndex(respostas);
+  if (headerIdx < 0) return empty;
+  if (!isMesOrTotal(mes)) return empty;
+
+  const map = mapRespostasHeader(respostas[headerIdx] || []);
+  let recolhidos = 0;
+  let entregues = 0;
+  for (let i = headerIdx + 1; i < respostas.length; i++) {
+    const row = respostas[i] || [];
+    if (map.serial >= 0 && !String(row[map.serial] || "").trim()) continue;
+    const mk = rowMonthKey(map, row);
+    if (!rowMatchesMes(mk, mes)) continue;
+    recolhidos += 1;
+    const status =
+      map.statusEntrega >= 0 ? row[map.statusEntrega] : undefined;
+    if (isEntregueStatus(status)) entregues += 1;
+  }
+  const em_processo = Math.max(0, recolhidos - entregues);
+  return {
+    recolhidos,
+    entregues,
+    em_processo,
+    pct_entregue: recolhidos > 0 ? entregues / recolhidos : 0,
+  };
+}
+
 export function aggregateServicos(
   respostas: unknown[][],
   mes: string,
@@ -210,10 +354,7 @@ export function aggregateServicos(
   const counts: Record<string, number> = { ...emptyServicoCounts(), OUTROS: 0 };
   const headerIdx = findRespostasHeaderIndex(respostas);
   if (headerIdx < 0) return countsToList(counts);
-
-  const isTotal = mes.trim().toUpperCase() === "TOTAL";
-  const target = isTotal ? null : parseMesParam(mes);
-  if (!isTotal && !target) return countsToList(counts);
+  if (!isMesOrTotal(mes)) return countsToList(counts);
 
   const map = mapRespostasHeader(respostas[headerIdx] || []);
   const servicoCol = map.servico >= 0 ? map.servico : 11;
@@ -221,23 +362,8 @@ export function aggregateServicos(
   for (let i = headerIdx + 1; i < respostas.length; i++) {
     const row = respostas[i] || [];
     if (map.serial >= 0 && !String(row[map.serial] || "").trim()) continue;
-    const dataVal = map.data >= 0 ? row[map.data] : undefined;
-    const tsVal = map.ts >= 0 ? row[map.ts] : undefined;
-    const periodVal = map.period >= 0 ? row[map.period] : undefined;
-    const mk =
-      monthKeyFromCell(dataVal, periodVal) ||
-      monthKeyFromCell(tsVal, periodVal);
-    if (!mk) continue;
-    if (isTotal) {
-      if (
-        mk.y < TIPOS_DESDE.y ||
-        (mk.y === TIPOS_DESDE.y && mk.m < TIPOS_DESDE.m)
-      ) {
-        continue;
-      }
-    } else if (!target || mk.y !== target.y || mk.m !== target.m) {
-      continue;
-    }
+    const mk = rowMonthKey(map, row);
+    if (!rowMatchesMes(mk, mes)) continue;
     const tipo = normalizeServico(row[servicoCol]);
     counts[tipo] = (counts[tipo] || 0) + 1;
   }

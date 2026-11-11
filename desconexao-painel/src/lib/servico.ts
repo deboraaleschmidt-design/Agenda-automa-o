@@ -135,6 +135,7 @@ export function mapRespostasHeader(head: unknown[]): {
   serial: number;
   servico: number;
   data: number;
+  statusEntrega: number;
 } {
   const norm = (s: unknown) =>
     String(s || "")
@@ -171,11 +172,20 @@ export function mapRespostasHeader(head: unknown[]): {
     }
   }
   if (dataIdx < 0) dataIdx = idx(["DATA"]);
+  let statusEntrega = -1;
+  for (let c = 0; c < head.length; c++) {
+    const h = norm(head[c]);
+    if (h.indexOf("STATUS") >= 0 && h.indexOf("ENTREG") >= 0) {
+      statusEntrega = c;
+      break;
+    }
+  }
   return {
     period: idx(["FATURAR"]) >= 0 ? idx(["FATURAR"]) : 0,
     ts: idx(["CARIMBO", "DATA/HORA"]),
     serial: serialIdx,
     servico: idx(["SERVIÇO", "SERVICO"]),
     data: dataIdx,
+    statusEntrega,
   };
 }
