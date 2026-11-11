@@ -42,11 +42,17 @@ export type PainelPayload = {
 };
 
 export const SETOR_DESCONEXAO = "desconexao";
+export const SETOR_IAT = "iat";
+export const SETOR_FINANCEIRO = "financeiro";
 export const EMPRESA_SEED_ID = "11111111-1111-4111-8111-111111111111";
 export const NOME_PUBLICO = "T.ESTRATÉGICO";
 export const SPREADSHEET_ID =
   process.env.GOOGLE_SHEETS_ID?.trim() ||
   "1vpdyJ2zalgu913_XRP-vtUaJXpSsrSpdydWAbFZOeWU";
+/** D-1 (IAT). Prefer secret GOOGLE_SHEETS_D1_ID; fallback = ID canônico do briefing. */
+export const SPREADSHEET_D1_ID =
+  process.env.GOOGLE_SHEETS_D1_ID?.trim() ||
+  "1u8Ng_a0Pu2eO2FfzJFGJ1bF4s6wldkkfMU7AoGAyUVM";
 
 export const TECH_LABELS: Record<string, string> = {
   Z698465: "Guilherme",

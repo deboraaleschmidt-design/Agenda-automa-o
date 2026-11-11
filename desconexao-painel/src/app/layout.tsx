@@ -24,8 +24,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DESCONEXÃO — Painel ao vivo",
-  description: "Painel operacional DESCONEXÃO · T.ESTRATÉGICO",
+  title: "T.ESTRATÉGICO — Painéis ao vivo",
+  description: "Hub operacional T.ESTRATÉGICO · Desconexão · IAT · Financeiro",
 };
 
 export default function RootLayout({

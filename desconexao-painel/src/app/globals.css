@@ -1217,3 +1217,28 @@ table.data.cidade-mes td:first-child {
   margin: 0 auto 1.5rem;
   color: rgba(255, 255, 255, 0.82);
 }
+
+.home-eyebrow {
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin-bottom: 0.35rem;
+}
+
+.home-segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.home-segments .btn-ghost {
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+
+.banner-error {
+  color: #b91c1c;
+  margin: 0.75rem 0;
+}
