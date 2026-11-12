@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import MesVisaoSelector from "../../components/MesVisaoSelector";
 import type { PainelPayload } from "../../lib/types";
 
 function currentMes(): string {
@@ -325,20 +326,11 @@ export default function PainelPage() {
             ) : null}
           </div>
           <div className="painel-controls">
-            <label className="field-month">
-              Visão
-              <select
-                aria-label="Selecionar mês ou TOTAL"
-                value={mes}
-                onChange={(e) => setMes(e.target.value)}
-              >
-                {MES_OPTIONS.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <MesVisaoSelector
+              value={mes}
+              options={MES_OPTIONS}
+              onChange={setMes}
+            />
             <button
               className="btn btn-ghost btn-sm"
               type="button"

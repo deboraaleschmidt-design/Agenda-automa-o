@@ -736,6 +736,51 @@ body.painel-page,
   cursor: pointer;
 }
 
+.mes-visao-field {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mes-visao-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.mes-visao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-width: min(42rem, 100%);
+}
+
+.mes-visao-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.42rem 0.72rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  line-height: 1.2;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.mes-visao-btn:hover {
+  border-color: var(--ink);
+}
+
+.mes-visao-btn.is-active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
 .btn-sm {
   padding: 0.45rem 0.9rem;
   font-size: 0.85rem;

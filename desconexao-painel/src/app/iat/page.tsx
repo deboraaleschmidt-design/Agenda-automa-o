@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AuthGate from "../../components/AuthGate";
+import MesVisaoSelector from "../../components/MesVisaoSelector";
 import {
   filterIatBlocks,
   type IatBase,
@@ -15,13 +16,9 @@ function pct(n: number): string {
   })}%`;
 }
 
-function currentMes(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
 function monthLabel(mes: string): string {
-  if (mes.trim().toUpperCase() === "TOTAL") return "TOTAL · período da aba IAT";
+  if (mes.trim().toUpperCase() === "TOTAL")
+    return "TOTAL · BASE IAT (set≥22/09 + out + nov)";
   const [y, m] = mes.split("-");
   const names = [
     "",
@@ -41,28 +38,32 @@ function monthLabel(mes: string): string {
   return `${names[Number(m)] || m} ${y}`;
 }
 
+/** Mesmo componente visual do /painel — IAT: TOTAL + Set/Out/Nov. */
 const MES_OPTIONS: Array<[string, string]> = [
   ["TOTAL", "TOTAL"],
   ["2026-09", "Set/2026"],
   ["2026-10", "Out/2026"],
   ["2026-11", "Nov/2026"],
-  ["2026-12", "Dez/2026"],
 ];
 
 function IatInner() {
   const [data, setData] = useState<IatPayload | null>(null);
   const [base, setBase] = useState<IatBase>("TOTAL");
-  const [mes, setMes] = useState(currentMes());
+  const [mes, setMes] = useState("TOTAL");
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const reqSeq = useRef(0);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const mesQ = params.get("mes")?.trim();
     if (mesQ) setMes(mesQ);
+    setReady(true);
   }, []);
 
   const load = useCallback(async (m: string, refresh = false) => {
+    const seq = ++reqSeq.current;
     setLoading(true);
     setError(null);
     try {
@@ -78,18 +79,27 @@ function IatInner() {
         } | null;
         throw new Error(body?.message || `HTTP ${res.status}`);
       }
-      setData((await res.json()) as IatPayload);
+      const payload = (await res.json()) as IatPayload;
+      if (seq !== reqSeq.current) return;
+      setData(payload);
     } catch (e) {
+      if (seq !== reqSeq.current) return;
       setData(null);
       setError(e instanceof Error ? e.message : "Falha");
     } finally {
-      setLoading(false);
+      if (seq === reqSeq.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    if (!ready) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("mes") !== mes) {
+      url.searchParams.set("mes", mes);
+      window.history.replaceState({}, "", url.toString());
+    }
     void load(mes, true);
-  }, [load, mes]);
+  }, [load, mes, ready]);
 
   const blocos = useMemo(
     () => filterIatBlocks(data?.blocos || [], base),
@@ -145,20 +155,11 @@ function IatInner() {
             ) : null}
           </div>
           <div className="painel-controls">
-            <label className="field-month">
-              Visão
-              <select
-                aria-label="Selecionar mês ou TOTAL"
-                value={mes}
-                onChange={(e) => setMes(e.target.value)}
-              >
-                {MES_OPTIONS.map(([v, l]) => (
-                  <option key={v} value={v}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <MesVisaoSelector
+              value={mes}
+              options={MES_OPTIONS}
+              onChange={setMes}
+            />
             <label className="field-month">
               Base
               <select
@@ -187,7 +188,7 @@ function IatInner() {
         <div className="container">
           <div className="ops-lead reveal">
             <div>
-              <p className="ops-kicker">Leitura só · D-1 · aba IAT</p>
+              <p className="ops-kicker">Leitura só · D-1 · BASE IAT</p>
               <h1 className="ops-title">{monthLabel(mes)}</h1>
               <p className="ops-sub">{data?.titulo || "—"}</p>
             </div>
@@ -209,12 +210,12 @@ function IatInner() {
             <article className="kpi kpi-hero reveal">
               <div className="kpi-label">Produtivas</div>
               <div className="kpi-value">{resumo?.produtivas ?? "—"}</div>
-              <div className="kpi-hint">RESUMO POR CONTRATO · {base}</div>
+              <div className="kpi-hint">contrato · BASE · {base}</div>
             </article>
             <article className="kpi reveal reveal-delay-1">
               <div className="kpi-label">Improdutivas</div>
               <div className="kpi-value">{resumo?.improdutivas ?? "—"}</div>
-              <div className="kpi-hint">aba IAT</div>
+              <div className="kpi-hint">BASE IAT</div>
             </article>
             <article className="kpi reveal reveal-delay-2">
               <div className="kpi-label">Contratos</div>
@@ -233,7 +234,7 @@ function IatInner() {
           <section className="painel-block" aria-labelledby="rank-iat">
             <div className="painel-block-head">
               <h2 id="rank-iat">Ranking · produtivas</h2>
-              <span>maior → menor · aba IAT</span>
+              <span>maior → menor · BASE IAT</span>
             </div>
             <div className="rank-list">
               {ranking.length === 0 ? (
@@ -281,7 +282,7 @@ function IatInner() {
                     {b.kind === "produtivas" ? "Produtivas" : "Improdutivas"} ·{" "}
                     {b.base}
                   </h2>
-                  <span>dia × técnico · aba IAT</span>
+                  <span>dia × técnico · BASE IAT</span>
                 </div>
                 <div className="table-wrap">
                   <table className="data compact">
@@ -323,7 +324,7 @@ function IatInner() {
           <section className="painel-block" aria-labelledby="ok-title">
             <div className="painel-block-head">
               <h2 id="ok-title">PAINEL OK</h2>
-              <span>espelho D-1 · recorte da aba</span>
+              <span>calculado da BASE · vivo</span>
             </div>
             {ok ? (
               <>

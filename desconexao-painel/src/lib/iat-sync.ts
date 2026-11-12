@@ -1,11 +1,5 @@
-import {
-  emptyIatPayload,
-  parseEquipe,
-  parseIatSheet,
-  parsePainelOk,
-  parseRetorno,
-  type IatPayload,
-} from "./iat-parse";
+import { buildIatFromBase } from "./iat-base-engine";
+import { emptyIatPayload, type IatPayload } from "./iat-parse";
 import { sheetsAuthOrNull } from "./sheets-client";
 import { SPREADSHEET_D1_ID } from "./types";
 
@@ -23,49 +17,31 @@ export async function syncIat(mes = "TOTAL"): Promise<IatPayload> {
   try {
     const res = await auth.sheets.spreadsheets.values.batchGet({
       spreadsheetId: SPREADSHEET_D1_ID,
-      ranges: [
-        "IAT!A1:AH120",
-        "'PAINEL OK'!A1:L120",
-        "'RETORNO CREDENCIADA'!A1:L80",
-        "EQUIPE!A1:F40",
-      ],
+      ranges: ["'BASE IAT'!A1:DO", "EQUIPE!A1:F40"],
       valueRenderOption: "FORMATTED_VALUE",
     });
     const ranges = res.data.valueRanges || [];
-    const iatRows = ranges[0]?.values || [];
-    const okRows = ranges[1]?.values || [];
-    const retRows = ranges[2]?.values || [];
-    const eqRows = ranges[3]?.values || [];
-
-    const parsed = parseIatSheet(iatRows);
-    const painel_ok = parsePainelOk(okRows);
-    const retorno = parseRetorno(retRows);
-    const equipe = parseEquipe(eqRows);
-
-    const mesReq = mes.trim().toUpperCase() === "TOTAL" ? "TOTAL" : mes.trim();
-    const mesMatch =
-      mesReq === "TOTAL" ||
-      (parsed.mes_aba != null && parsed.mes_aba === mesReq);
-
-    let mensagem: string | undefined;
-    if (!mesMatch && parsed.mes_aba) {
-      mensagem = `Aba IAT na D-1 está em ${parsed.mes_aba}. Grades dia×técnico / resumo IAT referem esse mês; PAINEL OK e RETORNO espelham o recorte estático da planilha (até 08/11 na leitura). Escolha ${parsed.mes_aba} ou TOTAL da aba.`;
-    }
+    const baseRows = ranges[0]?.values || [];
+    const eqRows = ranges[1]?.values || [];
+    const built = buildIatFromBase({
+      baseRows,
+      equipeRows: eqRows,
+      mes,
+    });
 
     return {
       atualizado_em: new Date().toISOString(),
       fonte: "sheets",
       status: "ok",
-      mensagem,
-      titulo: parsed.titulo,
-      mes: mesReq,
-      mes_aba: parsed.mes_aba,
-      blocos: mesMatch || mesReq === "TOTAL" ? parsed.blocos : [],
-      resumo: mesMatch || mesReq === "TOTAL" ? parsed.resumo : [],
-      ranking: mesMatch || mesReq === "TOTAL" ? parsed.ranking : [],
-      painel_ok,
-      retorno,
-      equipe,
+      titulo: built.titulo,
+      mes: built.mes,
+      mes_aba: built.mes_aba,
+      blocos: built.blocos,
+      resumo: built.resumo,
+      ranking: built.ranking,
+      painel_ok: built.painel_ok,
+      retorno: built.retorno,
+      equipe: built.equipe,
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
