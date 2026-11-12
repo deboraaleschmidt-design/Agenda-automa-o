@@ -16,32 +16,52 @@ function pct(n: number): string {
   })}%`;
 }
 
+const MES_NAMES = [
+  "",
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
 function monthLabel(mes: string): string {
   if (mes.trim().toUpperCase() === "TOTAL")
-    return "TOTAL · BASE IAT (set≥22/09 + out + nov)";
+    return "TOTAL · BASE IAT (desde 01/10)";
   const [y, m] = mes.split("-");
-  const names = [
-    "",
-    "Janeiro",
-    "Fevereiro",
-    "Março",
-    "Abril",
-    "Maio",
-    "Junho",
-    "Julho",
-    "Agosto",
-    "Setembro",
-    "Outubro",
-    "Novembro",
-    "Dezembro",
-  ];
-  return `${names[Number(m)] || m} ${y}`;
+  return `${MES_NAMES[Number(m)] || m} ${y}`;
 }
 
-/** Mesmo componente visual do /painel — IAT: TOTAL + Set/Out/Nov. */
-const MES_OPTIONS: Array<[string, string]> = [
+function mesBtnLabel(ym: string): string {
+  const [y, m] = ym.split("-");
+  const short = [
+    "",
+    "Jan",
+    "Fev",
+    "Mar",
+    "Abr",
+    "Mai",
+    "Jun",
+    "Jul",
+    "Ago",
+    "Set",
+    "Out",
+    "Nov",
+    "Dez",
+  ];
+  return `${short[Number(m)] || m}/${y}`;
+}
+
+/** Fallback até a API trazer meses_disponiveis da BASE. */
+const MES_FALLBACK: Array<[string, string]> = [
   ["TOTAL", "TOTAL"],
-  ["2026-09", "Set/2026"],
   ["2026-10", "Out/2026"],
   ["2026-11", "Nov/2026"],
 ];
@@ -117,6 +137,15 @@ function IatInner() {
   }, [data, base]);
   const maxRank = Math.max(1, ...ranking.map((r) => r.produtivas));
 
+  const mesOptions = useMemo((): Array<[string, string]> => {
+    const meses = data?.meses_disponiveis || [];
+    if (!meses.length) return MES_FALLBACK;
+    return [
+      ["TOTAL", "TOTAL"],
+      ...meses.map((ym): [string, string] => [ym, mesBtnLabel(ym)]),
+    ];
+  }, [data?.meses_disponiveis]);
+
   const ok = data?.painel_ok.resumo;
   const okTechs = (data?.painel_ok.tecnicos || []).filter((t) =>
     base === "TOTAL" ? true : t.base === base || (base === "PORTO ALEGRE" && t.base.includes("PORTO")),
@@ -157,7 +186,7 @@ function IatInner() {
           <div className="painel-controls">
             <MesVisaoSelector
               value={mes}
-              options={MES_OPTIONS}
+              options={mesOptions}
               onChange={setMes}
             />
             <label className="field-month">
@@ -188,7 +217,12 @@ function IatInner() {
         <div className="container">
           <div className="ops-lead reveal">
             <div>
-              <p className="ops-kicker">Leitura só · D-1 · BASE IAT</p>
+              <p className="ops-kicker">
+                Leitura só · D-1 · BASE IAT
+                {data?.dados_ate_br
+                  ? ` · dados até ${data.dados_ate_br}`
+                  : ""}
+              </p>
               <h1 className="ops-title">{monthLabel(mes)}</h1>
               <p className="ops-sub">{data?.titulo || "—"}</p>
             </div>
@@ -333,21 +367,21 @@ function IatInner() {
                 </p>
                 <section className="kpi-grid" style={{ padding: "1rem" }}>
                   <article className="kpi">
-                    <div className="kpi-label">Contratos OK (E6)</div>
+                    <div className="kpi-label">Contratos OK</div>
                     <div className="kpi-value">{ok.contratos_ok.total}</div>
                     <div className="kpi-hint">
                       C {ok.contratos_ok.canoas} · POA {ok.contratos_ok.poa}
                     </div>
                   </article>
                   <article className="kpi">
-                    <div className="kpi-label">Improdutivas (E7)</div>
+                    <div className="kpi-label">Improdutivas</div>
                     <div className="kpi-value">{ok.improdutivas.total}</div>
                     <div className="kpi-hint">
                       C {ok.improdutivas.canoas} · POA {ok.improdutivas.poa}
                     </div>
                   </article>
                   <article className="kpi">
-                    <div className="kpi-label">% Painel (E14)</div>
+                    <div className="kpi-label">% Painel</div>
                     <div className="kpi-value">{pct(ok.pct_painel.total)}</div>
                     <div className="kpi-hint">
                       C {pct(ok.pct_painel.canoas)} · POA {pct(ok.pct_painel.poa)}
@@ -362,10 +396,184 @@ function IatInner() {
                   </article>
                 </section>
                 {ok.ofensor ? (
-                  <p className="ops-note" style={{ margin: "0 1rem 1rem" }}>
-                    Ofensor: {ok.ofensor}
+                  <p className="ops-note" style={{ margin: "0 1rem 0.35rem" }}>
+                    Ofensor geral: {ok.ofensor}
+                    {ok.ofensor_canoas || ok.ofensor_poa ? (
+                      <span className="sub">
+                        {" "}
+                        · Canoas {ok.ofensor_canoas || "—"} · POA{" "}
+                        {ok.ofensor_poa || "—"}
+                      </span>
+                    ) : null}
                   </p>
                 ) : null}
+
+                <div className="painel-block-head" style={{ marginTop: "0.5rem" }}>
+                  <h2>Casa × Prédio</h2>
+                  <span>Complemento do endereço</span>
+                </div>
+                <div className="table-wrap">
+                  <table className="data compact">
+                    <thead>
+                      <tr>
+                        <th>Indicador</th>
+                        <th>Canoas</th>
+                        <th>Porto Alegre</th>
+                        <th>TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(
+                        [
+                          ["OK — Casa", ok.casa_predio.ok_casa],
+                          ["OK — Prédio", ok.casa_predio.ok_predio],
+                          ["OK — não inf. / outro", ok.casa_predio.ok_ni],
+                          ["Improd — Casa", ok.casa_predio.imp_casa],
+                          ["Improd — Prédio", ok.casa_predio.imp_predio],
+                          ["Improd — não inf. / outro", ok.casa_predio.imp_ni],
+                        ] as const
+                      ).map(([label, row]) => (
+                        <tr key={label}>
+                          <td>{label}</td>
+                          <td>{row.canoas}</td>
+                          <td>{row.poa}</td>
+                          <td>{row.total}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="painel-block-head" style={{ marginTop: "0.75rem" }}>
+                  <h2>Adesão — códigos (contratos OK)</h2>
+                  <span>{ok.adesao_ok} tarefas</span>
+                </div>
+                <div className="table-wrap">
+                  <table className="data compact">
+                    <thead>
+                      <tr>
+                        <th>Cód.</th>
+                        <th>Descrição</th>
+                        <th>Canoas</th>
+                        <th>POA</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ok.adesao_codigos.map((r) => (
+                        <tr key={`ad-${r.codigo}`}>
+                          <td>{r.codigo}</td>
+                          <td>{r.descricao}</td>
+                          <td>{r.canoas}</td>
+                          <td>{r.poa}</td>
+                          <td>{r.total}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="painel-block-head" style={{ marginTop: "0.5rem" }}>
+                  <h2>Improdutivas da Adesão</h2>
+                  <span>
+                    {ok.improdutivas_adesao.total} contratos · ofensor 1ª linha
+                  </span>
+                </div>
+                <div className="table-wrap">
+                  <table className="data compact">
+                    <thead>
+                      <tr>
+                        <th>Cód.</th>
+                        <th>Descrição</th>
+                        <th>Canoas</th>
+                        <th>POA</th>
+                        <th>Total</th>
+                        <th>Tipo pendência</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ok.adesao_improd_codigos.map((r) => (
+                        <tr key={`adi-${r.codigo}`}>
+                          <td>{r.codigo}</td>
+                          <td>{r.descricao}</td>
+                          <td>{r.canoas}</td>
+                          <td>{r.poa}</td>
+                          <td>{r.total}</td>
+                          <td>{r.tipo_pendencia || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="painel-block-head" style={{ marginTop: "0.75rem" }}>
+                  <h2>Migração — códigos (contratos OK)</h2>
+                  <span>{ok.migracao_ok} tarefas</span>
+                </div>
+                <div className="table-wrap">
+                  <table className="data compact">
+                    <thead>
+                      <tr>
+                        <th>Cód.</th>
+                        <th>Descrição</th>
+                        <th>Canoas</th>
+                        <th>POA</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ok.migracao_codigos.map((r) => (
+                        <tr key={`mg-${r.codigo}`}>
+                          <td>{r.codigo}</td>
+                          <td>{r.descricao}</td>
+                          <td>{r.canoas}</td>
+                          <td>{r.poa}</td>
+                          <td>{r.total}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="painel-block-head" style={{ marginTop: "0.5rem" }}>
+                  <h2>Improdutivas da Migração</h2>
+                  <span>{ok.improdutivas_migracao.total} contratos</span>
+                </div>
+                <div className="table-wrap">
+                  <table className="data compact">
+                    <thead>
+                      <tr>
+                        <th>Cód.</th>
+                        <th>Descrição</th>
+                        <th>Canoas</th>
+                        <th>POA</th>
+                        <th>Total</th>
+                        <th>Tipo pendência</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ok.migracao_improd_codigos.length === 0 ? (
+                        <tr>
+                          <td colSpan={6}>Nenhuma improdutiva de migração</td>
+                        </tr>
+                      ) : (
+                        ok.migracao_improd_codigos.map((r) => (
+                          <tr key={`mgi-${r.codigo}`}>
+                            <td>{r.codigo}</td>
+                            <td>{r.descricao}</td>
+                            <td>{r.canoas}</td>
+                            <td>{r.poa}</td>
+                            <td>{r.total}</td>
+                            <td>{r.tipo_pendencia || "—"}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="painel-block-head" style={{ marginTop: "0.75rem" }}>
+                  <h2>Por técnico</h2>
+                  <span>ranking por Contratos OK</span>
+                </div>
                 <div className="table-wrap">
                   <table className="data compact">
                     <thead>
@@ -377,6 +585,9 @@ function IatInner() {
                         <th>OK</th>
                         <th>Improd</th>
                         <th>%</th>
+                        <th>Adesão</th>
+                        <th>Migração</th>
+                        <th>OK casa/prédio/ni</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -392,11 +603,22 @@ function IatInner() {
                           <td>{t.contratos_ok}</td>
                           <td>{t.improdutivas}</td>
                           <td>{pct(t.pct_painel)}</td>
+                          <td>{t.adesao}</td>
+                          <td>{t.migracao}</td>
+                          <td>
+                            {t.ok_casa}/{t.ok_predio}/{t.ok_ni}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                {(data?.painel_ok.irreprodutiveis || []).length > 0 ? (
+                  <p className="painel-foot" style={{ padding: "0.75rem 1rem" }}>
+                    Limites vs aba estática:{" "}
+                    {(data?.painel_ok.irreprodutiveis || []).join(" · ")}
+                  </p>
+                ) : null}
               </>
             ) : (
               <p className="painel-foot" style={{ padding: "1rem" }}>

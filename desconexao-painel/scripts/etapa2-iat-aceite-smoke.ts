@@ -1,5 +1,6 @@
 /**
- * Aceite Etapa 2 — BASE IAT → /iat (nov = RESUMO aba; OK/RETORNO até 08/11).
+ * Aceite Etapa 2 — BASE IAT desde 01/10 → /iat.
+ * Recorte até 08/11 só confere regras vs abas estáticas (site não depende delas).
  * Run: npx --yes tsx scripts/etapa2-iat-aceite-smoke.ts
  */
 import { google } from "googleapis";
@@ -39,26 +40,24 @@ async function main() {
     equipeRows: eqRows,
     mes: "2026-11",
   });
-  const tot = nov.resumo.find((r) => r.base === "TOTAL");
-  assert(tot?.produtivas === 241, `nov produtivas=241 got ${tot?.produtivas}`);
-  assert(tot?.improdutivas === 52, `nov improd=52 got ${tot?.improdutivas}`);
+  const totNov = nov.resumo.find((r) => r.base === "TOTAL");
+  assert(totNov?.produtivas === 241, `nov produtivas=241 got ${totNov?.produtivas}`);
+  assert(totNov?.improdutivas === 52, `nov improd=52 got ${totNov?.improdutivas}`);
   assert(
-    Math.abs((tot?.pct_produtivas || 0) - 0.823) < 0.002,
-    `nov %≈82,3% got ${tot?.pct_produtivas}`,
+    Math.abs((totNov?.pct_produtivas || 0) - 0.823) < 0.002,
+    `nov %≈82,3% got ${totNov?.pct_produtivas}`,
   );
   assert(nov.blocos.length === 4, `nov 4 blocos got ${nov.blocos.length}`);
   assert(nov.ranking.length > 0, "nov ranking preenchido");
-
-  const set = buildIatFromBase({
-    baseRows,
-    equipeRows: eqRows,
-    mes: "2026-09",
-  });
-  // set≥22/09 pode estar vazio na BASE atual — ainda assim blocos existem (vazios ok se 0)
-  assert(set.mes === "2026-09", "set mes tag");
-  console.log(
-    "INFO set resumo TOTAL",
-    set.resumo.find((r) => r.base === "TOTAL"),
+  assert(
+    nov.dados_ate_br === "11/11",
+    `dados até 11/11 got ${nov.dados_ate_br}`,
+  );
+  assert(
+    nov.meses_disponiveis.includes("2026-10") &&
+      nov.meses_disponiveis.includes("2026-11") &&
+      !nov.meses_disponiveis.includes("2026-09"),
+    `meses BASE out+nov got ${nov.meses_disponiveis.join(",")}`,
   );
 
   const out = buildIatFromBase({
@@ -74,6 +73,11 @@ async function main() {
   assert(out.blocos.some((b) => b.tecnicos.length > 0), "out grades preenchidas");
   assert(out.painel_ok.resumo != null, "out PAINEL OK");
   assert(out.retorno.resumo != null, "out RETORNO");
+  assert(
+    (out.painel_ok.resumo?.adesao_codigos || []).length > 0,
+    "out adesão códigos",
+  );
+  assert(out.painel_ok.resumo?.casa_predio != null, "out casa×prédio");
 
   const hist = buildIatFromBase({
     baseRows,
@@ -81,17 +85,15 @@ async function main() {
     mes: "TOTAL",
   });
   const h = hist.resumo.find((r) => r.base === "TOTAL");
-  const expectP = (set.resumo.find((r) => r.base === "TOTAL")?.produtivas || 0) +
-    (outTot?.produtivas || 0) +
-    (tot?.produtivas || 0);
-  const expectI = (set.resumo.find((r) => r.base === "TOTAL")?.improdutivas || 0) +
-    (outTot?.improdutivas || 0) +
-    (tot?.improdutivas || 0);
+  const expectP = (outTot?.produtivas || 0) + (totNov?.produtivas || 0);
+  const expectI = (outTot?.improdutivas || 0) + (totNov?.improdutivas || 0);
   assert(
     h?.produtivas === expectP && h?.improdutivas === expectI,
-    `TOTAL=soma meses ${expectP}/${expectI} got ${h?.produtivas}/${h?.improdutivas}`,
+    `TOTAL=out+nov ${expectP}/${expectI} got ${h?.produtivas}/${h?.improdutivas}`,
   );
+  assert(hist.dados_ate_br === "11/11", `TOTAL dados até got ${hist.dados_ate_br}`);
 
+  // Conferência de regra (abas estáticas até 08/11) — site não depende delas.
   const okAte = buildIatFromBase({
     baseRows,
     equipeRows: eqRows,
@@ -109,6 +111,30 @@ async function main() {
   assert(
     Math.abs((okAte.painel_ok.resumo?.pct_painel.total || 0) - 0.819) < 0.002,
     `OK E14≈81,9% got ${okAte.painel_ok.resumo?.pct_painel.total}`,
+  );
+  const cp = okAte.painel_ok.resumo?.casa_predio;
+  assert(cp?.ok_casa.total === 22, `OK casa=22 got ${cp?.ok_casa.total}`);
+  assert(cp?.ok_predio.total === 85, `OK predio=85 got ${cp?.ok_predio.total}`);
+  assert(cp?.ok_ni.total === 42, `OK ni=42 got ${cp?.ok_ni.total}`);
+  assert(
+    okAte.painel_ok.resumo?.adesao_ok === 197,
+    `adesao tarefas=197 got ${okAte.painel_ok.resumo?.adesao_ok}`,
+  );
+  assert(
+    okAte.painel_ok.resumo?.migracao_ok === 40,
+    `migracao tarefas=40 got ${okAte.painel_ok.resumo?.migracao_ok}`,
+  );
+  assert(
+    okAte.painel_ok.resumo?.adesao_codigos[0]?.codigo === "43",
+    `adesao top 43 got ${okAte.painel_ok.resumo?.adesao_codigos[0]?.codigo}`,
+  );
+  assert(
+    okAte.painel_ok.resumo?.adesao_improd_codigos[0]?.codigo === "106",
+    `adesao improd ofensor 106 got ${okAte.painel_ok.resumo?.adesao_improd_codigos[0]?.codigo}`,
+  );
+  assert(
+    (okAte.painel_ok.tecnicos || []).length > 0,
+    "OK por técnico preenchido",
   );
   assert(
     okAte.retorno.resumo?.retornos_concluidos.total === 16,
@@ -135,7 +161,10 @@ async function main() {
     "(planilha; não inventar PJ)",
   );
   if (okAte.regras_irreprodutiveis.length) {
-    console.log("INFO regras/UI não clonadas:", okAte.regras_irreprodutiveis.join(" | "));
+    console.log(
+      "INFO irreprodutíveis:",
+      okAte.regras_irreprodutiveis.join(" | "),
+    );
   }
 
   if (fails.length) {

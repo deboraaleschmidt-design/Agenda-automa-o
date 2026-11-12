@@ -7,14 +7,17 @@ import {
   type EquipeRow,
   type IatBlock,
   type IatPayload,
+  type PainelOkCodeRow,
   type PainelOkResumo,
   type PainelOkTech,
+  type PainelOkTriple,
   type RetornoMotivo,
   type RetornoOfensor,
   type RetornoResumo,
 } from "./iat-parse";
 
-const HIST_START = "2026-09-22";
+/** IAT operacional começa em 01/10/2026 (Debora). */
+const HIST_START = "2026-10-01";
 const PAI_FROM = "2026-10-01";
 
 export type IatDate = { d: number; m: number; y: number; key: string };
@@ -30,6 +33,7 @@ export type IatReg = {
   codes: Array<{ code: number; desc: string }>;
   osRaw: string[];
   comp: string;
+  validacao: string;
 };
 
 type EquipeMap = Record<
@@ -102,6 +106,7 @@ function mapCols(header: unknown[]) {
     baixa: number[];
     os: number[];
     comp?: number;
+    validacao?: number;
   } = { baixa: [], os: [] };
   header.forEach((h, i) => {
     const f = fold(h);
@@ -123,6 +128,7 @@ function mapCols(header: unknown[]) {
     if (/^COD DE BAIXA \d+$/.test(f)) c.baixa.push(i);
     if (/^TIPO O\.?S \d+$/.test(f) || /^TIPO OS \d+$/.test(f)) c.os.push(i);
     if (f.indexOf("COMPLEMENTO") >= 0 && c.comp == null) c.comp = i;
+    if (f.indexOf("VALIDACAO BAIXA") >= 0 && c.validacao == null) c.validacao = i;
   });
   return c;
 }
@@ -161,6 +167,7 @@ export function parseBaseIatRegs(rows: unknown[][]): {
       codes,
       osRaw: (c.os || []).map((i) => txt(row[i])).filter(Boolean),
       comp: c.comp != null ? fold(row[c.comp]) : "",
+      validacao: c.validacao != null ? txt(row[c.validacao]) : "",
     });
   }
   regs.sort((a, b) =>
@@ -228,27 +235,35 @@ export function resolveMesRange(mes: string, maxKey?: string): MesRange {
   const mesReq = mes.trim().toUpperCase() === "TOTAL" ? "TOTAL" : mes.trim();
   const endCap = maxKey || "2099-12-31";
   if (mesReq === "TOTAL") {
+    // Meses concretos preenchidos em buildIatFromBase a partir da BASE.
     return {
       mesReq,
       start: HIST_START,
       end: endCap,
-      months: [
-        { y: 2026, m: 9 },
-        { y: 2026, m: 10 },
-        { y: 2026, m: 11 },
-        { y: 2026, m: 12 },
-      ],
+      months: [],
     };
   }
   const [ys, ms] = mesReq.split("-");
   const y = Number(ys);
   const m = Number(ms);
-  let start = `${y}-${pad(m)}-01`;
-  if (y === 2026 && m === 9) start = HIST_START;
+  const start = `${y}-${pad(m)}-01`;
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
   let end = `${y}-${pad(m)}-${pad(lastDay)}`;
   if (end > endCap) end = endCap;
+  if (start < HIST_START) {
+    return { mesReq, start: HIST_START, end, months: [{ y, m }] };
+  }
   return { mesReq, start, end, months: [{ y, m }] };
+}
+
+/** Meses YYYY-MM presentes na BASE desde HIST_START. */
+export function listMesesBase(regs: IatReg[]): string[] {
+  const set = new Set<string>();
+  for (const r of regs) {
+    if (r.dt.key < HIST_START) continue;
+    set.add(`${r.dt.y}-${pad(r.dt.m)}`);
+  }
+  return [...set].sort();
 }
 
 function inRange(key: string, start: string, end: string): boolean {
@@ -419,12 +434,90 @@ function findPai(
   return last;
 }
 
+function classEnd(comp: string): "casa" | "predio" | "ni" {
+  const c = fold(comp);
+  if (!c) return "ni";
+  // LOJA também aparece como LJ na BASE.
+  if (/APT|\bBL\b|TORRE|\bTOR\b|SALA|LOJA|\bLJ\b|EDIFIC/.test(c))
+    return "predio";
+  if (c.includes("CASA")) return "casa";
+  return "ni";
+}
+
+function isAdesaoOs(os: string): boolean {
+  return fold(os).includes("ADESAO");
+}
+
+function isMigracaoOs(os: string): boolean {
+  const f = fold(os);
+  return f.includes("MUDANCA DE ENDERECO") || f.includes("MIGRAC");
+}
+
+function parseOsCode(os: string): { code: string; desc: string } | null {
+  const m = txt(os).match(/^\s*(\d+)\s*(?:-\s*(.*))?$/);
+  if (!m) return null;
+  return { code: m[1], desc: fold(m[2] || "") };
+}
+
+/** Tipo de pendência a partir da coluna Validação Baixa (sem mapa hardcoded de códigos). */
+function tipoPendenciaFromValidacao(validacao: string): string {
+  const f = fold(validacao);
+  if (!f) return "—";
+  if (f.includes("REAGEND")) return "Reagendamento";
+  if (f.includes("BAIXA REALIZADA") || f.includes("JA BAIXADA") || f.includes("ENCERR"))
+    return "Baixa encerrada";
+  return "Outro (Validação Baixa)";
+}
+
+function emptyTriple(): PainelOkTriple {
+  return { canoas: 0, poa: 0, total: 0 };
+}
+
+function bumpTriple(t: PainelOkTriple, base: "CANOAS" | "PORTO ALEGRE", n = 1) {
+  if (base === "CANOAS") t.canoas += n;
+  else t.poa += n;
+  t.total += n;
+}
+
+function sortCodeRows(
+  map: Map<string, { desc: string; canoas: number; poa: number; tipo?: string }>,
+): PainelOkCodeRow[] {
+  return [...map.entries()]
+    .map(([codigo, v]) => ({
+      codigo,
+      descricao: v.desc,
+      canoas: v.canoas,
+      poa: v.poa,
+      total: v.canoas + v.poa,
+      tipo_pendencia: v.tipo,
+    }))
+    .sort((a, b) => b.total - a.total || Number(a.codigo) - Number(b.codigo));
+}
+
+function topOfensor(
+  map: Map<string, number>,
+): string {
+  let best = "";
+  let n = 0;
+  for (const [k, v] of map) {
+    if (v > n || (v === n && k < best)) {
+      n = v;
+      best = k;
+    }
+  }
+  return best ? `${best} (${n})` : "";
+}
+
 function computePainelOk(
   regs: IatReg[],
   eq: EquipeMap,
   start: string,
   end: string,
-): { resumo: PainelOkResumo; tecnicos: PainelOkTech[] } {
+): {
+  resumo: PainelOkResumo;
+  tecnicos: PainelOkTech[];
+  irreprodutiveis: string[];
+} {
   const ultimo: Record<
     string,
     {
@@ -432,6 +525,7 @@ function computePainelOk(
       codes: IatReg["codes"];
       osRaw: string[];
       comp: string;
+      validacao: string;
     }
   > = {};
   for (const r of regs) {
@@ -444,32 +538,67 @@ function computePainelOk(
       codes: r.codes,
       osRaw: r.osRaw,
       comp: r.comp,
+      validacao: r.validacao,
     };
   }
 
-  const ok = { canoas: 0, poa: 0, total: 0 };
-  const imp = { canoas: 0, poa: 0, total: 0 };
+  const ok = emptyTriple();
+  const imp = emptyTriple();
+  const casa_predio = {
+    ok_casa: emptyTriple(),
+    ok_predio: emptyTriple(),
+    ok_ni: emptyTriple(),
+    imp_casa: emptyTriple(),
+    imp_predio: emptyTriple(),
+    imp_ni: emptyTriple(),
+  };
   let adesao_ok = 0;
   let migracao_ok = 0;
+  const improdutivas_adesao = emptyTriple();
+  const improdutivas_migracao = emptyTriple();
   const ofImp = new Map<string, number>();
-  const byTech = new Map<
+  const ofImpC = new Map<string, number>();
+  const ofImpP = new Map<string, number>();
+  const adesaoMap = new Map<
     string,
-    {
-      base: string;
-      tecnico: string;
-      login: string;
-      vinculo: string;
-      contratos_ok: number;
-      improdutivas: number;
-      adesao: number;
-      migracao: number;
-    }
+    { desc: string; canoas: number; poa: number }
   >();
+  const migracaoMap = new Map<
+    string,
+    { desc: string; canoas: number; poa: number }
+  >();
+  const adesaoImpMap = new Map<
+    string,
+    { desc: string; canoas: number; poa: number; tipo?: string }
+  >();
+  const migracaoImpMap = new Map<
+    string,
+    { desc: string; canoas: number; poa: number; tipo?: string }
+  >();
+
+  type TechAcc = {
+    base: string;
+    tecnico: string;
+    login: string;
+    vinculo: string;
+    contratos_ok: number;
+    improdutivas: number;
+    adesao: number;
+    migracao: number;
+    ok_casa: number;
+    ok_predio: number;
+    ok_ni: number;
+    imp_casa: number;
+    imp_predio: number;
+    imp_ni: number;
+  };
+  const byTech = new Map<string, TechAcc>();
 
   for (const u of Object.values(ultimo)) {
     const b = baseKey(u.p);
     const isOk = u.codes.some((c) => c.code === 409);
-    const row = byTech.get(u.p.login) || {
+    const endClass = classEnd(u.comp);
+    const row: TechAcc = byTech.get(u.p.login) || {
       base: b,
       tecnico: u.p.nome,
       login: u.p.login,
@@ -478,45 +607,112 @@ function computePainelOk(
       improdutivas: 0,
       adesao: 0,
       migracao: 0,
+      ok_casa: 0,
+      ok_predio: 0,
+      ok_ni: 0,
+      imp_casa: 0,
+      imp_predio: 0,
+      imp_ni: 0,
     };
+    const hasAd = u.osRaw.some(isAdesaoOs);
+    const hasMig = u.osRaw.some(isMigracaoOs);
+
     if (isOk) {
-      if (b === "CANOAS") ok.canoas += 1;
-      else ok.poa += 1;
-      ok.total += 1;
+      bumpTriple(ok, b);
       row.contratos_ok += 1;
+      if (endClass === "casa") {
+        bumpTriple(casa_predio.ok_casa, b);
+        row.ok_casa += 1;
+      } else if (endClass === "predio") {
+        bumpTriple(casa_predio.ok_predio, b);
+        row.ok_predio += 1;
+      } else {
+        bumpTriple(casa_predio.ok_ni, b);
+        row.ok_ni += 1;
+      }
       for (const os of u.osRaw) {
-        const f = fold(os);
-        if (f.includes("ADESAO")) {
+        const parsed = parseOsCode(os);
+        if (!parsed) continue;
+        if (isAdesaoOs(os)) {
           adesao_ok += 1;
           row.adesao += 1;
+          const m = adesaoMap.get(parsed.code) || {
+            desc: parsed.desc,
+            canoas: 0,
+            poa: 0,
+          };
+          if (b === "CANOAS") m.canoas += 1;
+          else m.poa += 1;
+          adesaoMap.set(parsed.code, m);
         }
-        if (f.includes("MUDANCA DE ENDERECO") || f.includes("MIGRAC")) {
+        if (isMigracaoOs(os)) {
           migracao_ok += 1;
           row.migracao += 1;
+          const m = migracaoMap.get(parsed.code) || {
+            desc: parsed.desc,
+            canoas: 0,
+            poa: 0,
+          };
+          if (b === "CANOAS") m.canoas += 1;
+          else m.poa += 1;
+          migracaoMap.set(parsed.code, m);
         }
       }
     } else {
-      if (b === "CANOAS") imp.canoas += 1;
-      else imp.poa += 1;
-      imp.total += 1;
+      bumpTriple(imp, b);
       row.improdutivas += 1;
+      if (endClass === "casa") {
+        bumpTriple(casa_predio.imp_casa, b);
+        row.imp_casa += 1;
+      } else if (endClass === "predio") {
+        bumpTriple(casa_predio.imp_predio, b);
+        row.imp_predio += 1;
+      } else {
+        bumpTriple(casa_predio.imp_ni, b);
+        row.imp_ni += 1;
+      }
       const motivo = u.codes.find((c) => c.code !== 409) || u.codes[0];
       if (motivo) {
         const k = `${motivo.code} - ${motivo.desc}`;
         ofImp.set(k, (ofImp.get(k) || 0) + 1);
+        if (b === "CANOAS") ofImpC.set(k, (ofImpC.get(k) || 0) + 1);
+        else ofImpP.set(k, (ofImpP.get(k) || 0) + 1);
+      }
+      const tipoP = tipoPendenciaFromValidacao(u.validacao);
+      if (hasAd) {
+        bumpTriple(improdutivas_adesao, b);
+        if (motivo) {
+          const m = adesaoImpMap.get(String(motivo.code)) || {
+            desc: motivo.desc,
+            canoas: 0,
+            poa: 0,
+            tipo: tipoP,
+          };
+          if (b === "CANOAS") m.canoas += 1;
+          else m.poa += 1;
+          m.tipo = tipoP;
+          adesaoImpMap.set(String(motivo.code), m);
+        }
+      }
+      if (hasMig) {
+        bumpTriple(improdutivas_migracao, b);
+        if (motivo) {
+          const m = migracaoImpMap.get(String(motivo.code)) || {
+            desc: motivo.desc,
+            canoas: 0,
+            poa: 0,
+            tipo: tipoP,
+          };
+          if (b === "CANOAS") m.canoas += 1;
+          else m.poa += 1;
+          m.tipo = tipoP;
+          migracaoImpMap.set(String(motivo.code), m);
+        }
       }
     }
     byTech.set(u.p.login, row);
   }
 
-  let ofensor = "";
-  let ofN = 0;
-  for (const [k, n] of ofImp) {
-    if (n > ofN) {
-      ofN = n;
-      ofensor = `${k} (${n})`;
-    }
-  }
   const den = ok.total + imp.total;
   const pct = {
     canoas: ok.canoas + imp.canoas > 0 ? ok.canoas / (ok.canoas + imp.canoas) : 0,
@@ -543,8 +739,19 @@ function computePainelOk(
         pct_painel: d > 0 ? t.contratos_ok / d : 0,
         adesao: t.adesao,
         migracao: t.migracao,
+        ok_casa: t.ok_casa,
+        ok_predio: t.ok_predio,
+        ok_ni: t.ok_ni,
+        imp_casa: t.imp_casa,
+        imp_predio: t.imp_predio,
+        imp_ni: t.imp_ni,
       };
     });
+
+  const irreprodutiveis: string[] = [
+    "Cards Neutra WhatsApp por técnico (texto pronto) não são gerados — o site mostra ranking por técnico com casa/prédio e tarefas.",
+    "Rótulo 'Tipo de pendência' da aba estática usava mapa fixo por código; no site vem da coluna Validação Baixa (Reagendamento / Baixa encerrada / Outro).",
+  ];
 
   return {
     resumo: {
@@ -553,10 +760,20 @@ function computePainelOk(
       pct_painel: pct,
       adesao_ok,
       migracao_ok,
-      ofensor,
-      periodo_nota: `Fonte: BASE IAT · ${start} a ${end} · contagem por contrato (último registro) · Contrato OK = 409 · fora: Na Base, Refeição, sem contrato`,
+      improdutivas_adesao,
+      improdutivas_migracao,
+      ofensor: topOfensor(ofImp),
+      ofensor_canoas: topOfensor(ofImpC),
+      ofensor_poa: topOfensor(ofImpP),
+      periodo_nota: `Fonte: BASE IAT · ${start} a ${end} · contagem por contrato (último registro) · Contrato OK = 409 · fora: Na Base, Refeição, sem contrato · Casa/Prédio pelo Complemento`,
+      casa_predio,
+      adesao_codigos: sortCodeRows(adesaoMap),
+      migracao_codigos: sortCodeRows(migracaoMap),
+      adesao_improd_codigos: sortCodeRows(adesaoImpMap),
+      migracao_improd_codigos: sortCodeRows(migracaoImpMap),
     },
     tecnicos,
+    irreprodutiveis,
   };
 }
 
@@ -753,8 +970,16 @@ export function buildIatFromBase(opts: {
   const { regs, dup } = parseBaseIatRegs(opts.baseRows);
   const maxKey =
     regs.reduce((m, r) => (r.dt.key > m ? r.dt.key : m), "") || undefined;
+  const meses_disponiveis = listMesesBase(regs);
   const range = resolveMesRange(opts.mes, opts.ate || maxKey);
-  const { mesReq, start, end, months } = range;
+  const { mesReq, start, end } = range;
+  const months =
+    mesReq === "TOTAL"
+      ? meses_disponiveis.map((ym) => {
+          const [y, m] = ym.split("-").map(Number);
+          return { y, m };
+        })
+      : range.months;
 
   const mergedTech: Record<
     string,
@@ -811,10 +1036,7 @@ export function buildIatFromBase(opts: {
   const diasHeader =
     mesReq === "TOTAL"
       ? [...diasSet].sort((a, b) => a - b)
-      : Array.from({ length: 31 }, (_, i) => i + 1).filter((d) => {
-          if (mesReq === "2026-09") return d >= 22;
-          return true;
-        });
+      : Array.from({ length: 31 }, (_, i) => i + 1);
 
   const blocos = buildBlocos(mergedTech, diasHeader);
   const resumo: IatPayload["resumo"] = (
@@ -853,33 +1075,39 @@ export function buildIatFromBase(opts: {
         b.produtivas - a.produtivas || a.tecnico.localeCompare(b.tecnico),
     );
 
-  const painel_ok = computePainelOk(regs, eq, start, end);
+  const painel = computePainelOk(regs, eq, start, end);
   const retorno = computeRetorno(regs, eq, start, end);
 
+  const dados_ate = maxKey || null;
+  const dados_ate_br = dados_ate
+    ? `${dados_ate.slice(8, 10)}/${dados_ate.slice(5, 7)}`
+    : null;
   const mesLabel =
     mesReq === "TOTAL"
-      ? "TOTAL · BASE IAT (set≥22/09 + out + nov…)"
+      ? "TOTAL · BASE IAT (desde 01/10)"
       : `BASE IAT · ${mesReq}`;
-  const titulo = `PRODUTIVAS E IMPRODUTIVAS — ${mesLabel} · dados até ${end.slice(8)}/${end.slice(5, 7)}`;
-
-  const regras_irreprodutiveis: string[] = [];
-  // Casa/prédio detalhado e tabelas de Adesão por código existem na aba estática;
-  // o site cobre resumo OK + por técnico + ofensor, sem clonar todas as sub-tabelas.
-  regras_irreprodutiveis.push(
-    "Sub-tabelas estáticas da aba PAINEL OK (Casa/Prédio detalhado, códigos de Adesão linha a linha, tipo de pendência por código) não são clonadas na UI — só o resumo gestor + ranking por técnico, calculados da BASE.",
-  );
+  const titulo = dados_ate_br
+    ? `PRODUTIVAS E IMPRODUTIVAS — ${mesLabel} · dados até ${dados_ate_br}`
+    : `PRODUTIVAS E IMPRODUTIVAS — ${mesLabel}`;
 
   return {
     titulo,
+    dados_ate,
+    dados_ate_br,
+    meses_disponiveis,
     mes: mesReq,
     mes_aba: maxKey ? maxKey.slice(0, 7) : null,
     blocos,
     resumo,
     ranking,
-    painel_ok,
+    painel_ok: {
+      resumo: painel.resumo,
+      tecnicos: painel.tecnicos,
+      irreprodutiveis: painel.irreprodutiveis,
+    },
     retorno,
     equipe,
     dup,
-    regras_irreprodutiveis,
+    regras_irreprodutiveis: painel.irreprodutiveis,
   };
 }

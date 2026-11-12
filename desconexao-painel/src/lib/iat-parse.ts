@@ -24,14 +24,43 @@ export type EquipeRow = {
   situacao: string;
 };
 
+export type PainelOkTriple = { canoas: number; poa: number; total: number };
+
+export type PainelOkCasaPredio = {
+  ok_casa: PainelOkTriple;
+  ok_predio: PainelOkTriple;
+  ok_ni: PainelOkTriple;
+  imp_casa: PainelOkTriple;
+  imp_predio: PainelOkTriple;
+  imp_ni: PainelOkTriple;
+};
+
+export type PainelOkCodeRow = {
+  codigo: string;
+  descricao: string;
+  canoas: number;
+  poa: number;
+  total: number;
+  tipo_pendencia?: string;
+};
+
 export type PainelOkResumo = {
-  contratos_ok: { canoas: number; poa: number; total: number };
-  improdutivas: { canoas: number; poa: number; total: number };
+  contratos_ok: PainelOkTriple;
+  improdutivas: PainelOkTriple;
   pct_painel: { canoas: number; poa: number; total: number };
   adesao_ok: number;
   migracao_ok: number;
+  improdutivas_adesao: PainelOkTriple;
+  improdutivas_migracao: PainelOkTriple;
   ofensor: string;
+  ofensor_canoas: string;
+  ofensor_poa: string;
   periodo_nota: string;
+  casa_predio: PainelOkCasaPredio;
+  adesao_codigos: PainelOkCodeRow[];
+  migracao_codigos: PainelOkCodeRow[];
+  adesao_improd_codigos: PainelOkCodeRow[];
+  migracao_improd_codigos: PainelOkCodeRow[];
 };
 
 export type PainelOkTech = {
@@ -45,6 +74,12 @@ export type PainelOkTech = {
   pct_painel: number;
   adesao: number;
   migracao: number;
+  ok_casa: number;
+  ok_predio: number;
+  ok_ni: number;
+  imp_casa: number;
+  imp_predio: number;
+  imp_ni: number;
 };
 
 export type RetornoResumo = {
@@ -83,6 +118,12 @@ export type IatPayload = {
   status: "ok" | "aguardando_credencial_sheets";
   mensagem?: string;
   titulo: string;
+  /** Último dia com atividade na BASE IAT (yyyy-mm-dd). */
+  dados_ate: string | null;
+  /** Rótulo dd/mm para o topo. */
+  dados_ate_br: string | null;
+  /** Meses YYYY-MM disponíveis na BASE (≥ 01/10/2026). */
+  meses_disponiveis: string[];
   mes: string;
   mes_aba: string | null;
   blocos: IatBlock[];
@@ -97,6 +138,8 @@ export type IatPayload = {
   painel_ok: {
     resumo: PainelOkResumo | null;
     tecnicos: PainelOkTech[];
+    /** Regras/UI que não dá para reproduzir 1:1 só da BASE. */
+    irreprodutiveis?: string[];
   };
   retorno: {
     resumo: RetornoResumo | null;
@@ -434,9 +477,16 @@ export function parsePainelOk(rows: unknown[][]): {
       pct_painel: pctFromCell(row[6]),
       adesao: num(row[7]),
       migracao: num(row[8]),
+      ok_casa: 0,
+      ok_predio: 0,
+      ok_ni: 0,
+      imp_casa: 0,
+      imp_predio: 0,
+      imp_ni: 0,
     });
   }
 
+  const z = { canoas: 0, poa: 0, total: 0 };
   const resumo: PainelOkResumo | null = contratos_ok.total
     ? {
         contratos_ok,
@@ -444,8 +494,24 @@ export function parsePainelOk(rows: unknown[][]): {
         pct_painel,
         adesao_ok,
         migracao_ok,
+        improdutivas_adesao: { ...z },
+        improdutivas_migracao: { ...z },
         ofensor,
+        ofensor_canoas: "",
+        ofensor_poa: "",
         periodo_nota,
+        casa_predio: {
+          ok_casa: { ...z },
+          ok_predio: { ...z },
+          ok_ni: { ...z },
+          imp_casa: { ...z },
+          imp_predio: { ...z },
+          imp_ni: { ...z },
+        },
+        adesao_codigos: [],
+        migracao_codigos: [],
+        adesao_improd_codigos: [],
+        migracao_improd_codigos: [],
       }
     : null;
 
@@ -591,6 +657,9 @@ export function emptyIatPayload(
     status: "aguardando_credencial_sheets",
     mensagem,
     titulo: "IAT",
+    dados_ate: null,
+    dados_ate_br: null,
+    meses_disponiveis: [],
     mes,
     mes_aba: null,
     blocos: [],
