@@ -257,9 +257,10 @@ export function parseTiposFromPainel(rows: unknown[][]): {
     tipoCols.map(({ tipo, col }) => ({ tipo, quantidade: num(row[col]) }));
 
   for (let i = headerIdx + 1; i < rows.length; i++) {
+    const rawLabel = rows[i]?.[0];
     const label = cell(rows[i], 0);
     const u = label.toUpperCase().normalize("NFD").replace(/\p{M}/gu, "");
-    if (!label) break;
+    if (rawLabel === undefined || rawLabel === null || rawLabel === "") break;
     const row = rows[i] || [];
     const items = pack(row);
     const sum =
@@ -279,7 +280,9 @@ export function parseTiposFromPainel(rows: unknown[][]): {
     }
     if (u.startsWith("ANTES") || u.startsWith("SEM DATA")) continue;
 
-    const ym = parseTipoMesLabel(label);
+    const ym = parseTipoMesLabel(
+      typeof rawLabel === "number" ? rawLabel : label,
+    );
     if (ym) {
       empty.porMes[`${ym.y}-${String(ym.m).padStart(2, "0")}`] = items;
     }
@@ -288,8 +291,22 @@ export function parseTiposFromPainel(rows: unknown[][]): {
   return empty;
 }
 
-function parseTipoMesLabel(label: string): { y: number; m: number } | null {
-  const u = label
+function excelSerialToYm(serial: number): { y: number; m: number } | null {
+  if (!Number.isFinite(serial) || serial < 20000 || serial > 80000) return null;
+  // Google Sheets / Excel serial day (epoch 1899-12-30).
+  const ms = Date.UTC(1899, 11, 30) + Math.round(serial) * 86400000;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1 };
+}
+
+function parseTipoMesLabel(label: string | number): { y: number; m: number } | null {
+  if (typeof label === "number") return excelSerialToYm(label);
+  const trimmed = String(label || "").trim();
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    return excelSerialToYm(Number(trimmed));
+  }
+  const u = trimmed
     .toUpperCase()
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
@@ -326,11 +343,14 @@ export function resolveTiposForMes(
   mes: string,
 ): { itens: Array<{ tipo: string; quantidade: number }>; total: number; fonte: string } {
   const parsed = parseTiposFromPainel(painelRows);
+  const nonzero = (items: Array<{ tipo: string; quantidade: number }>) =>
+    items.filter((t) => t.quantidade > 0);
   if (mes.trim().toUpperCase() === "TOTAL") {
-    const itens =
+    const raw =
       parsed.totalDesdeAgo.length > 0
         ? parsed.totalDesdeAgo
         : parsed.totalGeral;
+    const itens = nonzero(raw);
     const total =
       parsed.totalDesdeAgoSum ||
       parsed.totalGeralSum ||
@@ -344,7 +364,7 @@ export function resolveTiposForMes(
     };
   }
   const key = mes.trim();
-  const itens = parsed.porMes[key] || [];
+  const itens = nonzero(parsed.porMes[key] || []);
   const total = itens.reduce((a, b) => a + b.quantidade, 0);
   return {
     itens,
