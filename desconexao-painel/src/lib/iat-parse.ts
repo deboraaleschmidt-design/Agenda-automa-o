@@ -104,7 +104,7 @@ export type RetornoOfensor = {
   sobre_409: number;
 };
 
-/** Ranking principal: quem atendeu o retorno (concluídos). */
+/** Ranking simples nome + qtd (principal = técnico pai; secundário = quem atendeu). */
 export type RetornoOfensorSimples = {
   pos: string;
   tecnico: string;
@@ -164,10 +164,10 @@ export type IatPayload = {
   };
   retorno: {
     resumo: RetornoResumo | null;
-    /** Visão principal: ofensor = quem atendeu (maior→menor). */
+    /** Visão principal: ofensor = técnico pai (maior→menor). */
     ofensores: RetornoOfensorSimples[];
-    /** Detalhe: ranking por técnico pai. */
-    ofensores_pai: RetornoOfensor[];
+    /** Secundário: quem atendeu o retorno. */
+    ofensores_atendeu: RetornoOfensorSimples[];
     motivos: RetornoMotivo[];
     detalhes: RetornoDetalhe[];
   };
@@ -546,7 +546,7 @@ export function parsePainelOk(rows: unknown[][]): {
 export function parseRetorno(rows: unknown[][]): {
   resumo: RetornoResumo | null;
   ofensores: RetornoOfensorSimples[];
-  ofensores_pai: RetornoOfensor[];
+  ofensores_atendeu: RetornoOfensorSimples[];
   motivos: RetornoMotivo[];
   detalhes: RetornoDetalhe[];
 } {
@@ -579,7 +579,7 @@ export function parseRetorno(rows: unknown[][]): {
       maior_motivo = cell(row, 4) || cell(row, 2);
   }
 
-  const ofensores_pai: RetornoOfensor[] = [];
+  const ofensores: RetornoOfensorSimples[] = [];
   let inOfensor = false;
   for (let i = 0; i < rows.length; i++) {
     const t = rowText(rows[i]);
@@ -597,40 +597,24 @@ export function parseRetorno(rows: unknown[][]): {
     if (pos.toUpperCase() === "TOTAL" || cell(rows[i], 1).toUpperCase() === "TOTAL") continue;
     const row = rows[i] || [];
     if (!cell(row, 1) && pos === "—") {
-      ofensores_pai.push({
+      ofensores.push({
         pos: "—",
         tecnico: cell(row, 1) || "não identificado",
         base: cell(row, 2) || "—",
         login: cell(row, 3) || "—",
         retornos: num(row[4]),
-        maior_motivo: cell(row, 5),
-        qtd_motivo: num(row[6]),
-        atendidos_outro: num(row[7]),
-        sobre_409: num(row[8]),
       });
       continue;
     }
     if (!cell(row, 1)) continue;
-    ofensores_pai.push({
+    ofensores.push({
       pos,
       tecnico: cell(row, 1),
       base: cell(row, 2),
       login: cell(row, 3),
       retornos: num(row[4]),
-      maior_motivo: cell(row, 5),
-      qtd_motivo: num(row[6]),
-      atendidos_outro: num(row[7]),
-      sobre_409: num(row[8]),
     });
   }
-  /** Fallback estático: aba só tem ranking por pai — espelha como ofensores. */
-  const ofensores: RetornoOfensorSimples[] = ofensores_pai.map((o) => ({
-    pos: o.pos,
-    tecnico: o.tecnico,
-    login: o.login,
-    base: o.base,
-    retornos: o.retornos,
-  }));
 
   const motivos: RetornoMotivo[] = [];
   let inMotivos = false;
@@ -671,7 +655,7 @@ export function parseRetorno(rows: unknown[][]): {
       }
     : null;
 
-  return { resumo, ofensores, ofensores_pai, motivos, detalhes: [] };
+  return { resumo, ofensores, ofensores_atendeu: [], motivos, detalhes: [] };
 }
 
 export function filterIatBlocks(
@@ -704,7 +688,7 @@ export function emptyIatPayload(
     retorno: {
       resumo: null,
       ofensores: [],
-      ofensores_pai: [],
+      ofensores_atendeu: [],
       motivos: [],
       detalhes: [],
     },

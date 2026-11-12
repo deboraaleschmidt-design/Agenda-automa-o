@@ -141,53 +141,49 @@ async function main() {
     `RET 16 got ${okAte.retorno.resumo?.retornos_concluidos.total}`,
   );
   assert(
-    okAte.retorno.ofensores[0]?.tecnico.includes("SERGIO"),
-    `1º ofensor (quem atendeu) SERGIO got ${okAte.retorno.ofensores[0]?.tecnico}`,
+    okAte.retorno.ofensores[0]?.tecnico.includes("DEIVISON"),
+    `1º ofensor (técnico pai) DEIVISON got ${okAte.retorno.ofensores[0]?.tecnico}`,
   );
   assert(
-    okAte.retorno.ofensores[0]?.retornos === 6,
-    `SERGIO retornos=6 (ate 08/11) got ${okAte.retorno.ofensores[0]?.retornos}`,
+    okAte.retorno.ofensores[0]?.retornos === 3,
+    `DEIVISON pai retornos=3 (ate 08/11) got ${okAte.retorno.ofensores[0]?.retornos}`,
   );
   assert(
-    okAte.retorno.ofensores_pai[0]?.tecnico.includes("DEIVISON"),
-    `1º técnico pai DEIVISON got ${okAte.retorno.ofensores_pai[0]?.tecnico}`,
+    okAte.retorno.ofensores_atendeu[0]?.tecnico.includes("SERGIO"),
+    `1º quem atendeu SERGIO got ${okAte.retorno.ofensores_atendeu[0]?.tecnico}`,
   );
   assert(
     okAte.retorno.motivos[0]?.codigo === "527",
     `motivo top 527 got ${okAte.retorno.motivos[0]?.codigo}`,
   );
 
-  const sergioNov = nov.retorno.ofensores.find((o) =>
+  const topPai = (rows: typeof nov.retorno.ofensores) =>
+    rows
+      .filter((o) => o.pos !== "—")
+      .slice(0, 10)
+      .map((o) => `${o.pos} ${o.tecnico} ${o.retornos}`)
+      .join(" | ");
+  console.log("INFO top10 pai Nov:", topPai(nov.retorno.ofensores));
+  console.log("INFO top10 pai TOTAL:", topPai(hist.retorno.ofensores));
+  const sergioPaiNov = nov.retorno.ofensores.find((o) =>
     o.tecnico.toUpperCase().includes("SERGIO"),
   );
-  const sergioTot = hist.retorno.ofensores.find((o) =>
+  const sergioPaiTot = hist.retorno.ofensores.find((o) =>
     o.tecnico.toUpperCase().includes("SERGIO"),
-  );
-  assert(
-    nov.retorno.ofensores[0]?.tecnico.toUpperCase().includes("SERGIO"),
-    `Nov 1º ofensor SERGIO got ${nov.retorno.ofensores[0]?.tecnico}`,
-  );
-  assert(
-    Boolean(sergioNov) && (sergioNov?.retornos || 0) >= 11,
-    `Nov SERGIO ≥11 got ${sergioNov?.retornos}`,
-  );
-  assert(
-    hist.retorno.ofensores[0]?.tecnico.toUpperCase().includes("SERGIO"),
-    `TOTAL 1º ofensor SERGIO got ${hist.retorno.ofensores[0]?.tecnico}`,
-  );
-  assert(
-    Boolean(sergioTot) && (sergioTot?.retornos || 0) >= 15,
-    `TOTAL SERGIO ≥15 got ${sergioTot?.retornos}`,
-  );
-  console.log(
-    "INFO SERGIO quem-atendeu:",
-    `Nov ${sergioNov?.pos} ${sergioNov?.retornos}`,
-    `TOTAL ${sergioTot?.pos} ${sergioTot?.retornos}`,
   );
   console.log(
     "INFO SERGIO técnico-pai:",
-    `Nov ${nov.retorno.ofensores_pai.find((o) => o.tecnico.toUpperCase().includes("SERGIO"))?.pos}/${nov.retorno.ofensores_pai.find((o) => o.tecnico.toUpperCase().includes("SERGIO"))?.retornos}`,
-    `TOTAL ${hist.retorno.ofensores_pai.find((o) => o.tecnico.toUpperCase().includes("SERGIO"))?.pos}/${hist.retorno.ofensores_pai.find((o) => o.tecnico.toUpperCase().includes("SERGIO"))?.retornos}`,
+    `Nov ${sergioPaiNov?.pos}/${sergioPaiNov?.retornos}`,
+    `TOTAL ${sergioPaiTot?.pos}/${sergioPaiTot?.retornos}`,
+  );
+  console.log(
+    "INFO SERGIO quem-atendeu:",
+    `Nov ${nov.retorno.ofensores_atendeu.find((o) => o.tecnico.toUpperCase().includes("SERGIO"))?.pos}/${nov.retorno.ofensores_atendeu.find((o) => o.tecnico.toUpperCase().includes("SERGIO"))?.retornos}`,
+    `TOTAL ${hist.retorno.ofensores_atendeu.find((o) => o.tecnico.toUpperCase().includes("SERGIO"))?.pos}/${hist.retorno.ofensores_atendeu.find((o) => o.tecnico.toUpperCase().includes("SERGIO"))?.retornos}`,
+  );
+  assert(
+    Boolean(sergioPaiNov) && (sergioPaiNov?.retornos || 0) >= 4,
+    `Nov SERGIO pai ≥4 got ${sergioPaiNov?.retornos}`,
   );
 
   const gab = hist.equipe.find((e) => e.nome.toUpperCase().includes("GABRIEL"));

@@ -152,7 +152,7 @@ function IatInner() {
   );
   const ret = data?.retorno.resumo;
   const ofensores = data?.retorno.ofensores || [];
-  const ofensoresPai = data?.retorno.ofensores_pai || [];
+  const ofensoresAtendeu = data?.retorno.ofensores_atendeu || [];
   const motivos = data?.retorno.motivos || [];
   const detalhes = data?.retorno.detalhes || [];
   const gabriel = (data?.equipe || []).find((e) =>
@@ -632,7 +632,7 @@ function IatInner() {
           <section className="painel-block" aria-labelledby="ret-title">
             <div className="painel-block-head">
               <h2 id="ret-title">RETORNO CREDENCIADA</h2>
-              <span>ofensor = quem atendeu</span>
+              <span>ofensor = técnico pai</span>
             </div>
             {ret ? (
               <>
@@ -667,20 +667,20 @@ function IatInner() {
 
                 <div className="painel-block-head" style={{ marginTop: "0.25rem" }}>
                   <h2>Ranking ofensores</h2>
-                  <span>nome + qtd · maior → menor</span>
+                  <span>técnico pai · nome + qtd · maior → menor</span>
                 </div>
                 <div className="table-wrap">
                   <table className="data compact">
                     <thead>
                       <tr>
                         <th>Pos.</th>
-                        <th>Técnico</th>
+                        <th>Técnico pai</th>
                         <th>Retornos</th>
                       </tr>
                     </thead>
                     <tbody>
                       {ofensores.map((o) => (
-                        <tr key={`of-${o.login}`}>
+                        <tr key={`pai-${o.login}-${o.tecnico}`}>
                           <td>{o.pos}</td>
                           <td>{o.tecnico}</td>
                           <td>{o.retornos}</td>
@@ -691,8 +691,8 @@ function IatInner() {
                 </div>
 
                 <div className="painel-block-head" style={{ marginTop: "0.75rem" }}>
-                  <h2>Detalhe</h2>
-                  <span>motivos · técnico pai · linhas</span>
+                  <h2>Motivos</h2>
+                  <span>código de baixa · maior → menor</span>
                 </div>
                 <div className="table-wrap">
                   <table className="data compact">
@@ -719,30 +719,25 @@ function IatInner() {
                   </table>
                 </div>
 
-                <div className="table-wrap" style={{ marginTop: "0.75rem" }}>
+                <div className="painel-block-head" style={{ marginTop: "0.75rem" }}>
+                  <h2>Quem atendeu</h2>
+                  <span>ranking secundário · nome + qtd</span>
+                </div>
+                <div className="table-wrap">
                   <table className="data compact">
                     <thead>
                       <tr>
                         <th>Pos.</th>
-                        <th>Técnico pai</th>
-                        <th>Base</th>
+                        <th>Técnico</th>
                         <th>Retornos</th>
-                        <th>Maior motivo</th>
-                        <th>Outro atendeu</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {ofensoresPai.map((o) => (
-                        <tr key={`pai-${o.pos}-${o.login}-${o.tecnico}`}>
+                      {ofensoresAtendeu.map((o) => (
+                        <tr key={`at-${o.login}`}>
                           <td>{o.pos}</td>
-                          <td>
-                            {o.tecnico}
-                            <span className="sub"> {o.login}</span>
-                          </td>
-                          <td>{o.base}</td>
+                          <td>{o.tecnico}</td>
                           <td>{o.retornos}</td>
-                          <td>{o.maior_motivo}</td>
-                          <td>{o.atendidos_outro}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -750,34 +745,40 @@ function IatInner() {
                 </div>
 
                 {detalhes.length > 0 ? (
-                  <div className="table-wrap" style={{ marginTop: "0.75rem" }}>
-                    <table className="data compact">
-                      <thead>
-                        <tr>
-                          <th>Data</th>
-                          <th>Contrato</th>
-                          <th>Técnico pai</th>
-                          <th>Quem atendeu</th>
-                          <th>Iguais?</th>
-                          <th>Cód.</th>
-                          <th>Descrição</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detalhes.map((d, i) => (
-                          <tr key={`det-${d.contrato}-${d.data}-${i}`}>
-                            <td>{d.data}</td>
-                            <td>{d.contrato}</td>
-                            <td>{d.tecnico_pai}</td>
-                            <td>{d.quem_atendeu}</td>
-                            <td>{d.iguais}</td>
-                            <td>{d.codigo}</td>
-                            <td>{d.descricao}</td>
+                  <>
+                    <div className="painel-block-head" style={{ marginTop: "0.75rem" }}>
+                      <h2>Detalhe</h2>
+                      <span>linhas da BASE</span>
+                    </div>
+                    <div className="table-wrap">
+                      <table className="data compact">
+                        <thead>
+                          <tr>
+                            <th>Data</th>
+                            <th>Contrato</th>
+                            <th>Técnico pai</th>
+                            <th>Quem atendeu</th>
+                            <th>Iguais?</th>
+                            <th>Cód.</th>
+                            <th>Descrição</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {detalhes.map((d, i) => (
+                            <tr key={`det-${d.contrato}-${d.data}-${i}`}>
+                              <td>{d.data}</td>
+                              <td>{d.contrato}</td>
+                              <td>{d.tecnico_pai}</td>
+                              <td>{d.quem_atendeu}</td>
+                              <td>{d.iguais}</td>
+                              <td>{d.codigo}</td>
+                              <td>{d.descricao}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 ) : null}
               </>
             ) : (

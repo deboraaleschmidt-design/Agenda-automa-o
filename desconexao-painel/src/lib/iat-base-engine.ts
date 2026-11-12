@@ -13,7 +13,6 @@ import {
   type PainelOkTriple,
   type RetornoDetalhe,
   type RetornoMotivo,
-  type RetornoOfensor,
   type RetornoOfensorSimples,
   type RetornoResumo,
 } from "./iat-parse";
@@ -787,7 +786,7 @@ function computeRetorno(
 ): {
   resumo: RetornoResumo;
   ofensores: RetornoOfensorSimples[];
-  ofensores_pai: RetornoOfensor[];
+  ofensores_atendeu: RetornoOfensorSimples[];
   motivos: RetornoMotivo[];
   detalhes: RetornoDetalhe[];
 } {
@@ -801,22 +800,15 @@ function computeRetorno(
       !soDesconexao(pessoa(eq, r)),
   );
 
-  /** Ofensor principal = quem atendeu o retorno (concluídos). */
+  /** Secundário: quem atendeu. */
   const atendMap = new Map<
     string,
     { tecnico: string; base: string; login: string; retornos: number }
   >();
-  const ofMap = new Map<
+  /** Principal: técnico pai (última baixa não-retorno desde PAI_FROM). */
+  const paiMap = new Map<
     string,
-    {
-      tecnico: string;
-      base: string;
-      login: string;
-      retornos: number;
-      motivos: Map<string, { n: number; desc: string }>;
-      outro: number;
-      sobre409: number;
-    }
+    { tecnico: string; base: string; login: string; retornos: number }
   >();
   const motivoMap = new Map<
     string,
@@ -886,27 +878,14 @@ function computeRetorno(
     } else if (atendBase === "CANOAS") naoC += 1;
     else naoP += 1;
 
-    const o = ofMap.get(keyPai) || {
+    const pRow = paiMap.get(keyPai) || {
       tecnico: pai?.nome || "não identificado",
       base: pai ? (pai.base === "CANOAS" ? "Canoas" : "Porto Alegre") : "—",
       login: pai?.login || "—",
       retornos: 0,
-      motivos: new Map(),
-      outro: 0,
-      sobre409: 0,
     };
-    o.retornos += 1;
-    if (pai && pai.login !== atend.login) o.outro += 1;
-    if (pai && pai.had409 && pai.dt >= start && pai.dt <= end) o.sobre409 += 1;
-    if (motivo) {
-      const prev = o.motivos.get(String(motivo.code)) || {
-        n: 0,
-        desc: motivo.desc,
-      };
-      prev.n += 1;
-      o.motivos.set(String(motivo.code), prev);
-    }
-    ofMap.set(keyPai, o);
+    pRow.retornos += 1;
+    paiMap.set(keyPai, pRow);
 
     if (motivo) {
       const mk = String(motivo.code);
@@ -936,58 +915,37 @@ function computeRetorno(
     });
   }
 
-  const ofensores: RetornoOfensorSimples[] = [...atendMap.values()]
-    .sort(
-      (a, b) =>
-        b.retornos - a.retornos || a.tecnico.localeCompare(b.tecnico),
-    )
-    .map((o, i) => ({
-      pos: `${i + 1}º`,
-      tecnico: o.tecnico,
-      login: o.login,
-      base: o.base,
-      retornos: o.retornos,
-    }));
-
-  const ofensores_pai: RetornoOfensor[] = [...ofMap.entries()]
-    .map(([key, o]) => {
-      let top = "";
-      let topDesc = "";
-      let tq = 0;
-      for (const [k, v] of o.motivos) {
-        if (v.n > tq) {
-          tq = v.n;
-          top = k;
-          topDesc = v.desc;
-        }
+  const rankSimples = (
+    entries: { key?: string; tecnico: string; base: string; login: string; retornos: number }[],
+    opts?: { naoIdLast?: boolean },
+  ): RetornoOfensorSimples[] => {
+    const sorted = [...entries].sort((a, b) => {
+      if (opts?.naoIdLast) {
+        if (a.key === "NAO_ID" && b.key !== "NAO_ID") return 1;
+        if (b.key === "NAO_ID" && a.key !== "NAO_ID") return -1;
       }
+      return b.retornos - a.retornos || a.tecnico.localeCompare(b.tecnico);
+    });
+    let pos = 0;
+    return sorted.map((o) => {
+      const isNao = o.key === "NAO_ID";
+      if (!isNao) pos += 1;
       return {
-        key,
+        pos: isNao ? "—" : `${pos}º`,
         tecnico: o.tecnico,
-        base: o.base,
         login: o.login,
+        base: o.base,
         retornos: o.retornos,
-        maior_motivo: top ? `${top} - ${topDesc}` : "",
-        qtd_motivo: tq,
-        atendidos_outro: o.outro,
-        sobre_409: o.sobre409,
       };
-    })
-    .sort(
-      (a, b) =>
-        b.retornos - a.retornos || a.tecnico.localeCompare(b.tecnico),
-    )
-    .map((o, i) => ({
-      pos: o.key === "NAO_ID" ? "—" : `${i + 1}º`,
-      tecnico: o.tecnico,
-      base: o.base,
-      login: o.login,
-      retornos: o.retornos,
-      maior_motivo: o.maior_motivo,
-      qtd_motivo: o.qtd_motivo,
-      atendidos_outro: o.atendidos_outro,
-      sobre_409: o.sobre_409,
-    }));
+    });
+  };
+
+  /** Principal: técnico pai. */
+  const ofensores = rankSimples(
+    [...paiMap.entries()].map(([key, o]) => ({ key, ...o })),
+    { naoIdLast: true },
+  );
+  const ofensores_atendeu = rankSimples([...atendMap.values()]);
 
   const motivos = [...motivoMap.values()].sort(
     (a, b) => b.total - a.total || Number(a.codigo) - Number(b.codigo),
@@ -1015,10 +973,10 @@ function computeRetorno(
       pai_igual: { canoas: iguC, poa: iguP, total: iguC + iguP },
       pai_nao_id: { canoas: naoC, poa: naoP, total: naoC + naoP },
       maior_motivo,
-      periodo_nota: `Fonte: BASE IAT · retornos ${start} a ${end} · ofensor = quem atendeu · pai = último concluído não-retorno desde ${PAI_FROM}`,
+      periodo_nota: `Fonte: BASE IAT · retornos ${start} a ${end} · ofensor = técnico pai (última baixa não-retorno desde ${PAI_FROM})`,
     },
     ofensores,
-    ofensores_pai,
+    ofensores_atendeu,
     motivos,
     detalhes,
   };
