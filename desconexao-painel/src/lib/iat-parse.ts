@@ -104,6 +104,27 @@ export type RetornoOfensor = {
   sobre_409: number;
 };
 
+/** Ranking principal: quem atendeu o retorno (concluídos). */
+export type RetornoOfensorSimples = {
+  pos: string;
+  tecnico: string;
+  login: string;
+  base: string;
+  retornos: number;
+};
+
+export type RetornoDetalhe = {
+  data: string;
+  contrato: string;
+  tecnico_pai: string;
+  atividade_pai: string;
+  quem_atendeu: string;
+  iguais: string;
+  codigo: string;
+  descricao: string;
+  sobre_409: string;
+};
+
 export type RetornoMotivo = {
   codigo: string;
   descricao: string;
@@ -143,8 +164,12 @@ export type IatPayload = {
   };
   retorno: {
     resumo: RetornoResumo | null;
-    ofensores: RetornoOfensor[];
+    /** Visão principal: ofensor = quem atendeu (maior→menor). */
+    ofensores: RetornoOfensorSimples[];
+    /** Detalhe: ranking por técnico pai. */
+    ofensores_pai: RetornoOfensor[];
     motivos: RetornoMotivo[];
+    detalhes: RetornoDetalhe[];
   };
   equipe: EquipeRow[];
 };
@@ -520,8 +545,10 @@ export function parsePainelOk(rows: unknown[][]): {
 
 export function parseRetorno(rows: unknown[][]): {
   resumo: RetornoResumo | null;
-  ofensores: RetornoOfensor[];
+  ofensores: RetornoOfensorSimples[];
+  ofensores_pai: RetornoOfensor[];
   motivos: RetornoMotivo[];
+  detalhes: RetornoDetalhe[];
 } {
   const periodo_nota = cell(rows[1], 0) || cell(rows[0], 0);
   const triple = (row: unknown[]) => ({
@@ -552,7 +579,7 @@ export function parseRetorno(rows: unknown[][]): {
       maior_motivo = cell(row, 4) || cell(row, 2);
   }
 
-  const ofensores: RetornoOfensor[] = [];
+  const ofensores_pai: RetornoOfensor[] = [];
   let inOfensor = false;
   for (let i = 0; i < rows.length; i++) {
     const t = rowText(rows[i]);
@@ -570,7 +597,7 @@ export function parseRetorno(rows: unknown[][]): {
     if (pos.toUpperCase() === "TOTAL" || cell(rows[i], 1).toUpperCase() === "TOTAL") continue;
     const row = rows[i] || [];
     if (!cell(row, 1) && pos === "—") {
-      ofensores.push({
+      ofensores_pai.push({
         pos: "—",
         tecnico: cell(row, 1) || "não identificado",
         base: cell(row, 2) || "—",
@@ -584,7 +611,7 @@ export function parseRetorno(rows: unknown[][]): {
       continue;
     }
     if (!cell(row, 1)) continue;
-    ofensores.push({
+    ofensores_pai.push({
       pos,
       tecnico: cell(row, 1),
       base: cell(row, 2),
@@ -596,6 +623,14 @@ export function parseRetorno(rows: unknown[][]): {
       sobre_409: num(row[8]),
     });
   }
+  /** Fallback estático: aba só tem ranking por pai — espelha como ofensores. */
+  const ofensores: RetornoOfensorSimples[] = ofensores_pai.map((o) => ({
+    pos: o.pos,
+    tecnico: o.tecnico,
+    login: o.login,
+    base: o.base,
+    retornos: o.retornos,
+  }));
 
   const motivos: RetornoMotivo[] = [];
   let inMotivos = false;
@@ -636,7 +671,7 @@ export function parseRetorno(rows: unknown[][]): {
       }
     : null;
 
-  return { resumo, ofensores, motivos };
+  return { resumo, ofensores, ofensores_pai, motivos, detalhes: [] };
 }
 
 export function filterIatBlocks(
@@ -666,7 +701,13 @@ export function emptyIatPayload(
     resumo: [],
     ranking: [],
     painel_ok: { resumo: null, tecnicos: [] },
-    retorno: { resumo: null, ofensores: [], motivos: [] },
+    retorno: {
+      resumo: null,
+      ofensores: [],
+      ofensores_pai: [],
+      motivos: [],
+      detalhes: [],
+    },
     equipe: [],
   };
 }

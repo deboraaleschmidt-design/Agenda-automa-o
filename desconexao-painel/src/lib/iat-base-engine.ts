@@ -11,8 +11,10 @@ import {
   type PainelOkResumo,
   type PainelOkTech,
   type PainelOkTriple,
+  type RetornoDetalhe,
   type RetornoMotivo,
   type RetornoOfensor,
+  type RetornoOfensorSimples,
   type RetornoResumo,
 } from "./iat-parse";
 
@@ -784,8 +786,10 @@ function computeRetorno(
   end: string,
 ): {
   resumo: RetornoResumo;
-  ofensores: RetornoOfensor[];
+  ofensores: RetornoOfensorSimples[];
+  ofensores_pai: RetornoOfensor[];
   motivos: RetornoMotivo[];
+  detalhes: RetornoDetalhe[];
 } {
   const retornos = regs.filter(
     (r) =>
@@ -797,6 +801,11 @@ function computeRetorno(
       !soDesconexao(pessoa(eq, r)),
   );
 
+  /** Ofensor principal = quem atendeu o retorno (concluídos). */
+  const atendMap = new Map<
+    string,
+    { tecnico: string; base: string; login: string; retornos: number }
+  >();
   const ofMap = new Map<
     string,
     {
@@ -813,6 +822,7 @@ function computeRetorno(
     string,
     { codigo: string; descricao: string; canoas: number; poa: number; total: number }
   >();
+  const detalhes: RetornoDetalhe[] = [];
 
   let conclC = 0;
   let conclP = 0;
@@ -831,21 +841,48 @@ function computeRetorno(
     if (atendBase === "CANOAS") conclC += 1;
     else conclP += 1;
 
+    const aKey = atend.login;
+    const aRow = atendMap.get(aKey) || {
+      tecnico: atend.nome,
+      base: atendBase === "CANOAS" ? "Canoas" : "Porto Alegre",
+      login: atend.login,
+      retornos: 0,
+    };
+    aRow.retornos += 1;
+    atendMap.set(aKey, aRow);
+
     const motivo = r.codes.find((c) => c.code !== 409) || r.codes[0];
     const pai = findPai(regs, eq, r.contrato, r.dt.key, r.i);
     let paiBase: "CANOAS" | "PORTO ALEGRE" = atendBase;
     let keyPai = "NAO_ID";
+    let iguais = "—";
+    let sobre409 = "não";
+    let ativPai = "—";
+    let paiLabel = "não identificado";
 
     if (pai) {
       keyPai = pai.login;
       paiBase = pai.base;
+      paiLabel = `${pai.login} · ${pai.nome}`;
+      ativPai = `${pai.dt.slice(8, 10)}/${pai.dt.slice(5, 7)}/${pai.dt.slice(0, 4)} · ${pai.tipo || "—"}`;
       if (paiBase === "CANOAS") gerC += 1;
       else gerP += 1;
       if (pai.login === atend.login) {
+        iguais = "SIM";
         if (paiBase === "CANOAS") iguC += 1;
         else iguP += 1;
-      } else if (paiBase === "CANOAS") difC += 1;
-      else difP += 1;
+      } else {
+        iguais = "NÃO";
+        if (paiBase === "CANOAS") difC += 1;
+        else difP += 1;
+      }
+      if (pai.had409) {
+        if (pai.dt >= start && pai.dt <= end) {
+          sobre409 = `SIM · 409 de ${pai.dt.slice(8, 10)}/${pai.dt.slice(5, 7)}`;
+        } else {
+          sobre409 = "409 de outubro";
+        }
+      }
     } else if (atendBase === "CANOAS") naoC += 1;
     else naoP += 1;
 
@@ -885,9 +922,34 @@ function computeRetorno(
       mm.total += 1;
       motivoMap.set(mk, mm);
     }
+
+    detalhes.push({
+      data: `${r.dt.key.slice(8, 10)}/${r.dt.key.slice(5, 7)}/${r.dt.key.slice(0, 4)}`,
+      contrato: r.contrato,
+      tecnico_pai: paiLabel,
+      atividade_pai: ativPai,
+      quem_atendeu: `${atend.login} · ${atend.nome}`,
+      iguais,
+      codigo: motivo ? String(motivo.code) : "",
+      descricao: motivo?.desc || "",
+      sobre_409: sobre409,
+    });
   }
 
-  const ofensores: RetornoOfensor[] = [...ofMap.entries()]
+  const ofensores: RetornoOfensorSimples[] = [...atendMap.values()]
+    .sort(
+      (a, b) =>
+        b.retornos - a.retornos || a.tecnico.localeCompare(b.tecnico),
+    )
+    .map((o, i) => ({
+      pos: `${i + 1}º`,
+      tecnico: o.tecnico,
+      login: o.login,
+      base: o.base,
+      retornos: o.retornos,
+    }));
+
+  const ofensores_pai: RetornoOfensor[] = [...ofMap.entries()]
     .map(([key, o]) => {
       let top = "";
       let topDesc = "";
@@ -901,7 +963,6 @@ function computeRetorno(
       }
       return {
         key,
-        pos: "",
         tecnico: o.tecnico,
         base: o.base,
         login: o.login,
@@ -936,6 +997,12 @@ function computeRetorno(
     ? `${topMotivo.codigo} - ${topMotivo.descricao} (${topMotivo.total})`
     : "";
 
+  detalhes.sort((a, b) => {
+    const da = a.data.split("/").reverse().join("-");
+    const db = b.data.split("/").reverse().join("-");
+    return da.localeCompare(db) || a.contrato.localeCompare(b.contrato);
+  });
+
   return {
     resumo: {
       retornos_concluidos: {
@@ -948,10 +1015,12 @@ function computeRetorno(
       pai_igual: { canoas: iguC, poa: iguP, total: iguC + iguP },
       pai_nao_id: { canoas: naoC, poa: naoP, total: naoC + naoP },
       maior_motivo,
-      periodo_nota: `Fonte: BASE IAT · retornos ${start} a ${end} · Retorno Credenciada · pai = último concluído não-retorno desde ${PAI_FROM}`,
+      periodo_nota: `Fonte: BASE IAT · retornos ${start} a ${end} · ofensor = quem atendeu · pai = último concluído não-retorno desde ${PAI_FROM}`,
     },
     ofensores,
+    ofensores_pai,
     motivos,
+    detalhes,
   };
 }
 
