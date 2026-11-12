@@ -9,11 +9,12 @@ export async function GET(request: Request) {
   const denied = requirePainelToken(request);
   if (denied) return denied;
   const url = new URL(request.url);
+  const mes = url.searchParams.get("mes")?.trim() || "TOTAL";
   const refresh = url.searchParams.get("refresh") === "1";
   if (refresh) {
     const limited = rateLimit(`iatsync:${clientKey(request)}`, 12, 5 * 60 * 1000);
     if (limited) return limited;
   }
-  const payload = await syncIat();
+  const payload = await syncIat(mes);
   return Response.json(payload);
 }
