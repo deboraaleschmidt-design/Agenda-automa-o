@@ -2,11 +2,13 @@ import { google } from "googleapis";
 import { sql } from "./db";
 import { buildFixturePayload } from "./fixture";
 import {
-  aggregateServicos,
+  buildRankingFromGrade,
   isMesOrTotal,
   parseCidadesFromPainel,
+  parsePainelMeta,
   resolveGradeForMes,
   resolveKpisForMes,
+  resolveTiposForMes,
 } from "./painel-parse";
 import {
   inspectServiceAccountJson,
@@ -134,10 +136,10 @@ async function readFromSheets(
   const sheets = google.sheets({ version: "v4", auth });
   const spreadsheetId = SPREADSHEET_ID;
 
-  // Wide PAINEL block — parse by title, never fixed KPI columns A–D.
+  // Wide PAINEL — parse by title (KPIs, grade, cidade, evolução, tipos).
   const res = await sheets.spreadsheets.values.batchGet({
     spreadsheetId,
-    ranges: ["PAINEL!A1:AG80", "'Respostas ao formulário 1'!A1:S"],
+    ranges: ["PAINEL!A1:AR80", "'Respostas ao formulário 1'!A1:S"],
     valueRenderOption: "UNFORMATTED_VALUE",
   });
 
@@ -145,12 +147,14 @@ async function readFromSheets(
   const painelRows = ranges[0]?.values || [];
   const respostas = ranges[1]?.values || [];
 
+  const meta = parsePainelMeta(painelRows);
   const kpis = resolveKpisForMes(painelRows, respostas, mes);
   const grade = resolveGradeForMes(painelRows, respostas, mes);
   const cidades = parseCidadesFromPainel(painelRows);
-  const tipos = aggregateServicos(respostas, mes);
+  const tipos = resolveTiposForMes(painelRows, mes);
+  const ranking = buildRankingFromGrade(grade.colunas, grade.totais);
   const mesLabel =
-    mes.trim().toUpperCase() === "TOTAL" ? "TOTAL" : mes;
+    mes.trim().toUpperCase() === "TOTAL" ? "TOTAL (período completo)" : mes;
 
   return {
     empresa: { id: EMPRESA_SEED_ID, nome_publico: NOME_PUBLICO },
@@ -159,12 +163,21 @@ async function readFromSheets(
     atualizado_em: new Date().toISOString(),
     fonte: "sheets",
     status: "ok",
-    mensagem: `Mês ${mesLabel} · Grade: ${grade.tituloMes}`,
+    mensagem: `${mesLabel} · ${tipos.fonte} · Grade: ${grade.tituloMes}`,
+    painel_atualizado: meta.atualizado,
+    nota_auditoria: grade.notaDuplicados || undefined,
     kpis,
-    grade_tecnicos: { colunas: grade.colunas, dias: grade.dias },
+    grade_tecnicos: {
+      colunas: grade.colunas,
+      dias: grade.dias,
+      totais: grade.totais,
+      fonte_grade: grade.fonteGrade,
+    },
+    ranking_tecnicos: ranking,
     por_cidade_mes: cidades.por_cidade_mes,
     evolucao_mensal: cidades.evolucao_mensal,
-    por_tipo_servico: tipos,
+    por_tipo_servico: tipos.itens,
+    tipos_total: tipos.total,
     // Quantidades only on team face — valores R$ ficam fora deste slice.
     a_pagar: [],
   };

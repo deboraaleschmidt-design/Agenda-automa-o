@@ -3,11 +3,19 @@ export type PainelKpis = {
   entregues: number;
   em_processo: number;
   pct_entregue: number;
+  /** cabecalho = células A4/I4/Q4/% do PAINEL; mes = só recolhas oficiais do mês. */
+  escopo: "cabecalho" | "mes";
 };
 
 export type GradeColuna = {
   nome: string;
   codigo: string;
+};
+
+export type RankingTecnico = {
+  nome: string;
+  codigo: string;
+  volume: number;
 };
 
 export type PainelPayload = {
@@ -18,20 +26,29 @@ export type PainelPayload = {
   fonte: "sheets" | "fixture";
   status: "ok" | "aguardando_credencial_sheets";
   mensagem?: string;
+  /** Linha "Atualizado · …" do PAINEL. */
+  painel_atualizado?: string;
+  /** Ex.: seriais duplicados desconsiderados. */
+  nota_auditoria?: string;
   kpis: PainelKpis;
   grade_tecnicos: {
     colunas: GradeColuna[];
     /** rows: [dayNumber, ...counts per column] */
     dias: number[][];
+    /** TOT por técnico (coluna TOT da grade PAINEL, se houver). */
+    totais: number[];
+    fonte_grade?: "painel" | "respostas" | "none";
   };
+  ranking_tecnicos: RankingTecnico[];
   por_cidade_mes: Array<{
     cidade: string;
     meses: Record<string, number>;
     total: number;
   }>;
   evolucao_mensal: Array<{ mes: string; recolhas: number }>;
-  /** Contagens do mês a partir de Respostas col. SERVIÇO (L). */
+  /** Contagens do bloco TOTAL POR TIPO DE SERVIÇO no PAINEL. */
   por_tipo_servico: Array<{ tipo: string; quantidade: number }>;
+  tipos_total?: number;
   a_pagar: Array<{
     tecnico: string;
     codigo: string;
