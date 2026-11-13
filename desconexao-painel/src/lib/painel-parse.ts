@@ -442,7 +442,7 @@ export function findRespostasHeaderIndex(rows: unknown[][]): number {
 
 const TIPOS_DESDE = { y: 2026, m: 8 } as const;
 
-function rowMonthKey(
+export function rowMonthKey(
   map: ReturnType<typeof mapRespostasHeader>,
   row: unknown[],
 ): { y: number; m: number } | null {
@@ -511,28 +511,51 @@ export function recolhidosOficiaisNoMes(
 }
 
 /**
- * KPIs for the selected month — só números do PAINEL (sem inventar).
- * TOTAL → cabeçalho (A4/I4/Q4/%).
- * YYYY-MM → recolhas oficiais do mês (cidade/evo); entregues/% ficam 0
- * (células mensais não existem no cabeçalho — UI marca escopo "mes").
+ * KPIs for the selected month — só números oficiais (sem inventar).
+ * TOTAL → cabeçalho PAINEL (A4/I4/Q4/%).
+ * YYYY-MM → recolhas oficiais do PAINEL (cidade/evo); entregues / em processo / %
+ *          calculados da Respostas no mês (STATUS DE ENTREGA) — o cabeçalho
+ *          não tem célula mensal desses indicadores.
  */
 export function resolveKpisForMes(
   painelRows: unknown[][],
-  _respostas: unknown[][],
+  respostas: unknown[][],
   mes: string,
 ): PainelKpis {
   const header = parseKpisFromPainel(painelRows);
   if (mes.trim().toUpperCase() === "TOTAL") {
-    return { ...header, escopo: "cabecalho" };
+    return { ...header, escopo: "cabecalho", fonte_mes: "painel" };
   }
 
   const oficiais = recolhidosOficiaisNoMes(painelRows, mes) ?? 0;
+  const fromResp = aggregateKpisFromRespostas(respostas, mes);
+  const hasEntrega =
+    fromResp.entregues > 0 ||
+    fromResp.em_processo > 0 ||
+    fromResp.recolhidos > 0;
+  if (hasEntrega) {
+    // Recolhas = PAINEL oficial; entregues = Respostas no mês;
+    // em processo = recolhas − entregues (não usar contagem bruta da Respostas,
+    // que pode divergir do volume oficial por serial/fora do app).
+    const entregues = Math.min(fromResp.entregues, oficiais || fromResp.entregues);
+    const em_processo = Math.max(0, oficiais - entregues);
+    const basePct = oficiais > 0 ? oficiais : fromResp.recolhidos;
+    return {
+      recolhidos: oficiais,
+      entregues,
+      em_processo,
+      pct_entregue: basePct > 0 ? entregues / basePct : 0,
+      escopo: "mes",
+      fonte_mes: "respostas",
+    };
+  }
   return {
     recolhidos: oficiais,
     entregues: 0,
     em_processo: 0,
     pct_entregue: 0,
     escopo: "mes",
+    fonte_mes: "none",
   };
 }
 

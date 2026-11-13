@@ -142,10 +142,11 @@ export function buildFixturePayload(
         }
       : {
           recolhidos: isNov ? 101 : evo[Math.max(0, Number(mes.split("-")[1] || 1) - 1)] || 0,
-          entregues: 0,
-          em_processo: 0,
-          pct_entregue: 0,
+          entregues: isNov ? 40 : 0,
+          em_processo: isNov ? 61 : 0,
+          pct_entregue: isNov ? 40 / 101 : 0,
           escopo: "mes",
+          fonte_mes: isNov ? "respostas" : "none",
         },
     grade_tecnicos: {
       colunas,

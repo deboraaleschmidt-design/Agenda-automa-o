@@ -273,9 +273,9 @@ if (outRec !== 296) fail(`out oficiais=${outRec}`);
 const kpisOut = resolveKpisForMes(painelRows, respostas, "2026-10");
 if (kpisOut.recolhidos !== 296) fail(`kpi out recolhidos=${kpisOut.recolhidos}`);
 if (kpisOut.escopo !== "mes") fail(`kpi out escopo=${kpisOut.escopo}`);
-// Etapa 1: mês não inventa entregues/% — só cabeçalho no TOTAL.
-if (kpisOut.entregues !== 0) fail(`kpi out entregues=${kpisOut.entregues}`);
-if (kpisOut.em_processo !== 0) fail(`kpi out processo=${kpisOut.em_processo}`);
+// Etapa 3: mês calcula entregues/processo da Respostas (não inventa zeros).
+if (kpisOut.fonte_mes !== "respostas") fail(`kpi out fonte=${kpisOut.fonte_mes}`);
+if (kpisOut.entregues < 1) fail(`kpi out entregues=${kpisOut.entregues}`);
 
 const gradeOut = resolveGradeForMes(painelRows, respostas, "2026-10");
 if (gradeOut.fonteGrade !== "respostas") fail(`gradeOut fonte=${gradeOut.fonteGrade}`);

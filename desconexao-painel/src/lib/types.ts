@@ -3,8 +3,13 @@ export type PainelKpis = {
   entregues: number;
   em_processo: number;
   pct_entregue: number;
-  /** cabecalho = células A4/I4/Q4/% do PAINEL; mes = só recolhas oficiais do mês. */
+  /**
+   * cabecalho = células A4/I4/Q4/% do PAINEL (TOTAL);
+   * mes = recolhas oficiais do PAINEL + entregues/processo da Respostas no mês.
+   */
   escopo: "cabecalho" | "mes";
+  /** Fonte dos cards secundários no mês (quando não há célula de cabeçalho). */
+  fonte_mes?: "respostas" | "painel" | "none";
 };
 
 export type GradeColuna = {
@@ -70,6 +75,10 @@ export const SPREADSHEET_ID =
 export const SPREADSHEET_D1_ID =
   process.env.GOOGLE_SHEETS_D1_ID?.trim() ||
   "1u8Ng_a0Pu2eO2FfzJFGJ1bF4s6wldkkfMU7AoGAyUVM";
+/** LPU GERAL TCI — preços oficiais (só leitura). */
+export const SPREADSHEET_LPU_ID =
+  process.env.GOOGLE_SHEETS_LPU_ID?.trim() ||
+  "16JYdGm7WraN8AtjqGcpE-bE2eXyfRhrixujZY_JYEPc";
 
 export const TECH_LABELS: Record<string, string> = {
   Z698465: "Guilherme",
