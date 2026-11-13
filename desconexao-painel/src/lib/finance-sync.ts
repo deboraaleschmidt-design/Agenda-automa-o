@@ -37,6 +37,11 @@ import {
   SPREADSHEET_LPU_ID,
 } from "./types";
 
+/** Títulos reais das abas no Sheets (API). Nunca exibir na UI — só T.ESTRATÉGICO / LPU · Desconexão / LPU · IAT / Faturar. */
+const SHEET_FATURAR = "'FATURAR CLARO'!A1:E40";
+const SHEET_LPU_DES = "'CLARO DESCONEXÃO'!A1:E40";
+const SHEET_LPU_IAT = "'CLARO IAT'!A1:G220";
+
 function fold(v: unknown): string {
   return String(v ?? "")
     .normalize("NFD")
@@ -200,7 +205,7 @@ function buildDesconexaoAtividades(
       preco_unitario: b.preco,
       valor: b.sem || b.preco == null ? null : Math.round(b.qtd * b.preco * 100) / 100,
       sem_preco: b.sem,
-      origem_lpu: "LPU · aba CLARO DESCONEXÃO (+ regras VALORES)",
+      origem_lpu: "LPU · Desconexão (+ regras VALORES)",
     }))
     .sort((a, b) => b.quantidade - a.quantidade);
 
@@ -342,7 +347,7 @@ function buildIatAtividades(
       preco_unitario: b.preco,
       valor: b.sem || b.preco == null ? null : Math.round(b.qtd * b.preco * 100) / 100,
       sem_preco: b.sem,
-      origem_lpu: "LPU · aba CLARO IAT (casamento por descrição Tipo O.S)",
+      origem_lpu: "LPU · IAT (casamento por descrição Tipo O.S)",
     }))
     .sort((a, b) => b.quantidade - a.quantidade);
 
@@ -414,7 +419,7 @@ export async function syncFinanceiro(opts?: {
         spreadsheetId: SPREADSHEET_ID,
         ranges: [
           "'PAINEL RECOLHAS'!A1:E40",
-          "'FATURAR CLARO'!A1:E40",
+          SHEET_FATURAR,
           "'Respostas ao formulário 1'!A1:S",
         ],
         valueRenderOption: "FORMATTED_VALUE",
@@ -426,7 +431,7 @@ export async function syncFinanceiro(opts?: {
       }),
       auth.sheets.spreadsheets.values.batchGet({
         spreadsheetId: SPREADSHEET_LPU_ID,
-        ranges: ["'CLARO DESCONEXÃO'!A1:E40", "'CLARO IAT'!A1:G220"],
+        ranges: [SHEET_LPU_DES, SHEET_LPU_IAT],
         valueRenderOption: "FORMATTED_VALUE",
       }),
     ]);
@@ -477,7 +482,7 @@ export async function syncFinanceiro(opts?: {
         : fatCheck.reduce((s, m) => s + m.recolhas, 0);
     const fatAviso =
       showDes && fatQty > 0
-        ? `Conferência FATURAR CLARO (${mes}): ${fatQty} recolhas · ${fatSum.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · LPU Respostas: ${subDes.servicos} · ${subDes.valor_faturar.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`
+        ? `Conferência Faturar (${mes}): ${fatQty} recolhas · ${fatSum.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · LPU Respostas: ${subDes.servicos} · ${subDes.valor_faturar.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`
         : "";
 
     const duvidas = [
@@ -499,8 +504,8 @@ export async function syncFinanceiro(opts?: {
       segmento,
       meses_disponiveis,
       lpu_origem: {
-        desconexao: "LPU GERAL TCI · aba CLARO DESCONEXÃO (preço bruto c/ impostos)",
-        iat: `LPU GERAL TCI · aba CLARO IAT${
+        desconexao: "LPU · Desconexão (preço bruto c/ impostos)",
+        iat: `LPU · IAT${
           lpuIat.valorHora != null
             ? ` · VALOR HS R$ ${lpuIat.valorHora.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
             : ""

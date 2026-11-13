@@ -396,7 +396,7 @@ export default function PainelPage() {
                   <div className="kpi-hint">
                     {isTotal
                       ? "PAINEL · cabeçalho"
-                      : "Respostas · STATUS DE ENTREGA (mês)"}
+                      : "Respostas · STATUS contém ENTREGUE · DATA no mês"}
                   </div>
                 </article>
                 <article className="kpi reveal reveal-delay-2">

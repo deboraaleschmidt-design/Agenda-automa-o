@@ -360,7 +360,7 @@ function FinanceiroInner() {
             <section className="painel-block">
               <div className="painel-block-head">
                 <h2>FATURAR · conferência mensal</h2>
-                <span>Aba FATURAR CLARO (Desconexão)</span>
+                <span>Faturar · Desconexão</span>
               </div>
               <div className="table-wrap">
                 <table className="data compact">

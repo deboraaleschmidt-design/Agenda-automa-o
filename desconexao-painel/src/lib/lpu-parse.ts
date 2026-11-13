@@ -1,4 +1,4 @@
-/** Parse LPU abas CLARO DESCONEXÃO e CLARO IAT (só leitura). */
+/** Parse LPU Desconexão e IAT (só leitura; títulos internos de aba Sheets). */
 
 export type LpuItem = {
   codigo: string;
@@ -35,7 +35,7 @@ function cell(row: unknown[] | undefined, i: number): string {
   return String(row?.[i] ?? "").trim();
 }
 
-/** Aba CLARO DESCONEXÃO: Descrição | Preço bruto. */
+/** LPU Desconexão: Descrição | Preço bruto. */
 export function parseLpuDesconexao(rows: unknown[][]): LpuItem[] {
   const items: LpuItem[] = [];
   for (let i = 0; i < rows.length; i++) {
@@ -57,7 +57,7 @@ export function parseLpuDesconexao(rows: unknown[][]): LpuItem[] {
   return items;
 }
 
-/** Aba CLARO IAT: ITEM | DESCRIÇÃO | tempo | VALOR | SITUAÇÃO. */
+/** LPU IAT: ITEM | DESCRIÇÃO | tempo | VALOR | SITUAÇÃO. */
 export function parseLpuIat(rows: unknown[][]): {
   items: LpuItem[];
   valorHora: number | null;

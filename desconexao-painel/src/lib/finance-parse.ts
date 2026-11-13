@@ -86,8 +86,8 @@ export function emptyFinancePayload(
     segmento,
     meses_disponiveis: [],
     lpu_origem: {
-      desconexao: "LPU · aba CLARO DESCONEXÃO",
-      iat: "LPU · aba CLARO IAT",
+      desconexao: "LPU · Desconexão",
+      iat: "LPU · IAT",
       valor_hora_iat: null,
     },
     atividades: [],
@@ -157,7 +157,7 @@ export function parseAPagar(rows: unknown[][]): {
   return { titulo, linhas, total };
 }
 
-/** FATURAR CLARO — tabela mensal cronológica. */
+/** Aba Faturar — tabela mensal cronológica. */
 export function parseFaturamento(rows: unknown[][]): {
   meses: FaturamentoMes[];
   agoMais: { recolhas: number; valor: number };
