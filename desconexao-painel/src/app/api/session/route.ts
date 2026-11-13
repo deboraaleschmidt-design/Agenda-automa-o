@@ -17,7 +17,7 @@ const SESSION_WINDOW_MS = 15 * 60 * 1000;
 /** Establish httpOnly session cookie from Bearer or JSON body `{ token }`. */
 export async function POST(request: Request) {
   const limited = rateLimit(
-    `session:${loginClientKey()}`,
+    `session:${loginClientKey(request)}`,
     SESSION_LIMIT,
     SESSION_WINDOW_MS,
   );

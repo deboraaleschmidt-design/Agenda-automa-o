@@ -184,6 +184,9 @@ function IatInner() {
             {data?.fonte ? (
               <span className="status-pill">{data.fonte}</span>
             ) : null}
+            <a className="btn btn-ghost btn-sm" href="/">
+              ← Segmentos
+            </a>
           </div>
           <div className="painel-controls">
             <MesVisaoSelector

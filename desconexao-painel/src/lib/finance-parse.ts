@@ -16,17 +16,92 @@ export type FaturamentoMes = {
   periodo: string;
 };
 
+export type FinanceSegmento = "desconexao" | "iat" | "todos";
+
+export type FinanceAtividade = {
+  segmento: "desconexao" | "iat";
+  codigo: string;
+  descricao: string;
+  quantidade: number;
+  preco_unitario: number | null;
+  valor: number | null;
+  sem_preco: boolean;
+  origem_lpu: string;
+};
+
+export type FinanceSubtotal = {
+  servicos: number;
+  valor_faturar: number;
+  sem_preco: number;
+  a_pagar: number | null;
+};
+
 export type FinancePayload = {
   atualizado_em: string;
   fonte: "sheets" | "fixture";
   status: "ok" | "aguardando_credencial_sheets";
   mensagem?: string;
+  mes: string;
+  segmento: FinanceSegmento;
+  meses_disponiveis: string[];
+  lpu_origem: {
+    desconexao: string;
+    iat: string;
+    valor_hora_iat: number | null;
+  };
+  atividades: FinanceAtividade[];
+  subtotais: {
+    desconexao: FinanceSubtotal;
+    iat: FinanceSubtotal;
+    geral: FinanceSubtotal;
+  };
   quinzena_titulo: string;
   a_pagar: APagarLinha[];
   total_a_pagar: number;
+  /** IAT: sem regra de pagamento na planilha. */
+  a_pagar_iat_nota: string;
   faturamento_meses: FaturamentoMes[];
   faturamento_ago_mais: { recolhas: number; valor: number };
+  duvidas: string[];
+  gabriel_nota?: string;
 };
+
+export function emptyFinancePayload(
+  mes: string,
+  segmento: FinanceSegmento,
+  mensagem: string,
+): FinancePayload {
+  const zero: FinanceSubtotal = {
+    servicos: 0,
+    valor_faturar: 0,
+    sem_preco: 0,
+    a_pagar: null,
+  };
+  return {
+    atualizado_em: new Date().toISOString(),
+    fonte: "fixture",
+    status: "aguardando_credencial_sheets",
+    mensagem,
+    mes,
+    segmento,
+    meses_disponiveis: [],
+    lpu_origem: {
+      desconexao: "LPU · aba CLARO DESCONEXÃO",
+      iat: "LPU · aba CLARO IAT",
+      valor_hora_iat: null,
+    },
+    atividades: [],
+    subtotais: { desconexao: zero, iat: { ...zero }, geral: { ...zero } },
+    quinzena_titulo: "",
+    a_pagar: [],
+    total_a_pagar: 0,
+    a_pagar_iat_nota:
+      "Pagamento a técnico IAT: NÃO INFORMADO na planilha — só faturamento LPU.",
+    faturamento_meses: [],
+    faturamento_ago_mais: { recolhas: 0, valor: 0 },
+    duvidas: [],
+  };
+}
 
 function cell(row: unknown[] | undefined, i: number): string {
   return String(row?.[i] ?? "").trim();
@@ -117,4 +192,46 @@ export function parseFaturamento(rows: unknown[][]): {
     });
   }
   return { meses, agoMais };
+}
+
+export function filterFaturamentoPorMes(
+  meses: FaturamentoMes[],
+  mes: string,
+): FaturamentoMes[] {
+  if (mes.trim().toUpperCase() === "TOTAL") {
+    // Financeiro Desconexão foca AGO+
+    return meses.filter((row) => {
+      const u = row.mes.toLowerCase();
+      return (
+        u.includes("agosto") ||
+        u.includes("setembro") ||
+        u.includes("outubro") ||
+        u.includes("novembro") ||
+        u.includes("dezembro") ||
+        row.periodo.toUpperCase().includes("AGO")
+      );
+    });
+  }
+  const [y, m] = mes.split("-");
+  const names: Record<number, string[]> = {
+    1: ["janeiro"],
+    2: ["fevereiro"],
+    3: ["março", "marco"],
+    4: ["abril"],
+    5: ["maio"],
+    6: ["junho"],
+    7: ["julho"],
+    8: ["agosto"],
+    9: ["setembro"],
+    10: ["outubro"],
+    11: ["novembro"],
+    12: ["dezembro"],
+  };
+  const mi = Number(m);
+  const labels = names[mi] || [];
+  return meses.filter((row) => {
+    const u = row.mes.toLowerCase();
+    if (!u.includes(y)) return false;
+    return labels.some((label) => u.includes(label));
+  });
 }

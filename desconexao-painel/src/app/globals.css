@@ -1487,3 +1487,15 @@ table.data.cidade-mes td:first-child {
     grid-area: bar;
   }
 }
+
+.ops-note-list {
+  margin: 0;
+  padding: 0.85rem 1.25rem 1.1rem 2rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.ops-note-list li + li {
+  margin-top: 0.35rem;
+}

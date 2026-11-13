@@ -324,6 +324,9 @@ export default function PainelPage() {
             {data?.fonte ? (
               <span className="status-pill">{data.fonte}</span>
             ) : null}
+            <a className="btn btn-ghost btn-sm" href="/">
+              ← Segmentos
+            </a>
           </div>
           <div className="painel-controls">
             <MesVisaoSelector
@@ -385,47 +388,72 @@ export default function PainelPage() {
                 {isTotal ? "PAINEL · cabeçalho" : "PAINEL · cidade/evolução"}
               </div>
             </article>
-            <article
-              className={`kpi reveal reveal-delay-1 ${kpis?.escopo === "mes" ? "kpi-muted" : ""}`}
-            >
-              <div className="kpi-label">Entregues</div>
-              <div className="kpi-value">
-                {kpis?.escopo === "cabecalho" ? (kpis.entregues ?? "—") : "—"}
-              </div>
-              <div className="kpi-hint">
-                {kpis?.escopo === "cabecalho"
-                  ? "PAINEL · cabeçalho"
-                  : "Só no TOTAL (célula do cabeçalho)"}
-              </div>
-            </article>
-            <article
-              className={`kpi reveal reveal-delay-2 ${kpis?.escopo === "mes" ? "kpi-muted" : ""}`}
-            >
-              <div className="kpi-label">Em processo</div>
-              <div className="kpi-value">
-                {kpis?.escopo === "cabecalho" ? (kpis.em_processo ?? "—") : "—"}
-              </div>
-              <div className="kpi-hint">
-                {kpis?.escopo === "cabecalho"
-                  ? "PAINEL · cabeçalho"
-                  : "Só no TOTAL (célula do cabeçalho)"}
-              </div>
-            </article>
-            <article
-              className={`kpi reveal reveal-delay-3 ${kpis?.escopo === "mes" ? "kpi-muted" : ""}`}
-            >
-              <div className="kpi-label">% Entregue</div>
-              <div className="kpi-value">
-                {kpis?.escopo === "cabecalho" && kpis
-                  ? pctLabel(kpis.pct_entregue)
-                  : "—"}
-              </div>
-              <div className="kpi-hint">
-                {kpis?.escopo === "cabecalho"
-                  ? "PAINEL · cabeçalho"
-                  : "Só no TOTAL (célula do cabeçalho)"}
-              </div>
-            </article>
+            {isTotal || kpis?.fonte_mes === "respostas" ? (
+              <>
+                <article className="kpi reveal reveal-delay-1">
+                  <div className="kpi-label">Entregues</div>
+                  <div className="kpi-value">{kpis?.entregues ?? "—"}</div>
+                  <div className="kpi-hint">
+                    {isTotal
+                      ? "PAINEL · cabeçalho"
+                      : "Respostas · STATUS DE ENTREGA (mês)"}
+                  </div>
+                </article>
+                <article className="kpi reveal reveal-delay-2">
+                  <div className="kpi-label">Em processo</div>
+                  <div className="kpi-value">{kpis?.em_processo ?? "—"}</div>
+                  <div className="kpi-hint">
+                    {isTotal
+                      ? "PAINEL · cabeçalho"
+                      : "Recolhas − entregues (mês)"}
+                  </div>
+                </article>
+                <article className="kpi reveal reveal-delay-3">
+                  <div className="kpi-label">% Entregue</div>
+                  <div className="kpi-value">
+                    {kpis ? pctLabel(kpis.pct_entregue) : "—"}
+                  </div>
+                  <div className="kpi-hint">
+                    {isTotal
+                      ? "PAINEL · cabeçalho"
+                      : "Entregues ÷ recolhas do mês"}
+                  </div>
+                </article>
+              </>
+            ) : (
+              <>
+                <article className="kpi reveal reveal-delay-1">
+                  <div className="kpi-label">Tipos no mês</div>
+                  <div className="kpi-value">{data?.tipos_total ?? "—"}</div>
+                  <div className="kpi-hint">PAINEL · por tipo de serviço</div>
+                </article>
+                <article className="kpi reveal reveal-delay-2">
+                  <div className="kpi-label">Top técnico</div>
+                  <div className="kpi-value">
+                    {ranking[0]?.volume ?? "—"}
+                  </div>
+                  <div className="kpi-hint">
+                    {ranking[0]
+                      ? `${ranking[0].nome} · grade TOT`
+                      : "Sem ranking no mês"}
+                  </div>
+                </article>
+                <article className="kpi reveal reveal-delay-3">
+                  <div className="kpi-label">Cidades com volume</div>
+                  <div className="kpi-value">
+                    {highlightKey
+                      ? (data?.por_cidade_mes || []).filter(
+                          (c) => (c.meses[highlightKey] || 0) > 0,
+                        ).length
+                      : "—"}
+                  </div>
+                  <div className="kpi-hint">
+                    PAINEL · cidade × mês
+                    {highlightKey ? ` · ${highlightKey}` : ""}
+                  </div>
+                </article>
+              </>
+            )}
           </section>
 
           <section className="painel-block" aria-labelledby="rank-title">

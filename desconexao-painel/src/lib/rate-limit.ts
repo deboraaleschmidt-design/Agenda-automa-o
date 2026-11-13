@@ -44,12 +44,30 @@ export function rateLimit(
 }
 
 /**
- * Login attempts: never key off spoofable proxy IP headers, and never off the
- * submitted token (rotating fake Bearers would bypass the limit). Shared bucket
- * is correct for this private single-owner panel.
+ * Login attempts: per IP/client (not a global bucket). Prefer proxy IP when the
+ * host sets it; fall back to a short hash of User-Agent so distinct clients
+ * behind the same edge still get separate windows. Never key off the token.
  */
-export function loginClientKey(): string {
-  return "anon";
+export function loginClientKey(request: Request): string {
+  const xf = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
+  const real = request.headers.get("x-real-ip")?.trim() || "";
+  const ip = xf || real || "";
+  const ua = request.headers.get("user-agent") || "";
+  if (ip) {
+    const digest = createHash("sha256")
+      .update(`ip:${ip}|ua:${ua.slice(0, 120)}`)
+      .digest("hex")
+      .slice(0, 16);
+    return `login:${digest}`;
+  }
+  if (ua) {
+    const digest = createHash("sha256")
+      .update(`ua:${ua}`)
+      .digest("hex")
+      .slice(0, 16);
+    return `login:ua:${digest}`;
+  }
+  return "login:anon";
 }
 
 /**
