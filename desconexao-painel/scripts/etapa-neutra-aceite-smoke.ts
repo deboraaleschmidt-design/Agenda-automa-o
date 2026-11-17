@@ -85,6 +85,50 @@ async function main() {
     "UI nome sem matrícula",
   );
 
+  const vd = built.visao_dia;
+  assert(!!vd, "visao_dia presente em Nov");
+  if (vd) {
+    assert(vd.cols.length === 30, `cols Nov=30 got ${vd.cols.length}`);
+    assert(
+      vd.cols[14]?.fechamento === "1a",
+      `dia 15 fechamento 1a got ${vd.cols[14]?.fechamento}`,
+    );
+    assert(
+      vd.cols[29]?.fechamento === "2a",
+      `dia 30 fechamento 2a got ${vd.cols[29]?.fechamento}`,
+    );
+    assert(
+      vd.total.produtivas === 865,
+      `visao total prod=865 got ${vd.total.produtivas}`,
+    );
+    assert(
+      vd.total.improdutivas === 354,
+      `visao total improd=354 got ${vd.total.improdutivas}`,
+    );
+    assert(
+      vd.total.q1 + vd.total.q2 === 865,
+      `q1+q2=865 got ${vd.total.q1}+${vd.total.q2}`,
+    );
+    console.log(
+      `QUINZENAS Nov: 1ª=${vd.total.q1} 2ª=${vd.total.q2} · pag PJ ${vd.pagamento.q1_pago_em} / ${vd.pagamento.q2_pago_em}`,
+    );
+    // 20/11/2026 = feriado Consciência Negra → 1º útil = 21/11 (sáb conta)
+    assert(
+      vd.pagamento.q1_pago_em === "21/11/2026",
+      `pag 1ª=21/11/2026 got ${vd.pagamento.q1_pago_em}`,
+    );
+    // 05/12/2026 = sábado → conta como dia útil
+    assert(
+      vd.pagamento.q2_pago_em === "05/12/2026",
+      `pag 2ª=05/12/2026 got ${vd.pagamento.q2_pago_em}`,
+    );
+    const clts = vd.rows.filter((r) => !r.is_pj);
+    assert(
+      clts.length >= 3,
+      `≥3 CLT na visão got ${clts.length}`,
+    );
+  }
+
   const fin = await syncFinanceiro({ mes: "2026-11", segmento: "neutra" });
   assert(fin.status === "ok", `fin status ok got ${fin.status}`);
   assert(

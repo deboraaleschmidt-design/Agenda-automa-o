@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AuthGate from "../../components/AuthGate";
 import MesVisaoSelector from "../../components/MesVisaoSelector";
-import type { NeutraPayload } from "../../lib/neutra-parse";
+import type {
+  NeutraPayload,
+  NeutraVisaoDiaRow,
+} from "../../lib/neutra-parse";
 
 function pct(n: number): string {
   return `${(Math.round(n * 1000) / 10).toLocaleString("pt-BR", {
@@ -241,6 +244,175 @@ function NeutraInner() {
               <div className="kpi-hint">dias distintos na base</div>
             </article>
           </section>
+
+          {data?.visao_dia ? (
+            <section
+              className="painel-block"
+              aria-labelledby="tab-neutra-dia"
+            >
+              <div className="painel-block-head">
+                <h2 id="tab-neutra-dia">Visão por dia</h2>
+                <span>
+                  produtivas/dia · quinzenas ·{" "}
+                  {data.visao_dia.rows.length} técnico(s)
+                </span>
+              </div>
+              <div className="neutra-pay-legend" role="note">
+                <p>
+                  <strong>Pagamento só PJ</strong> ·{" "}
+                  {data.visao_dia.pagamento.q1_referencia}: paga em{" "}
+                  <strong>{data.visao_dia.pagamento.q1_pago_em}</strong>
+                  {" · "}
+                  {data.visao_dia.pagamento.q2_referencia}: paga em{" "}
+                  <strong>{data.visao_dia.pagamento.q2_pago_em}</strong>
+                </p>
+                <p className="neutra-pay-rule">
+                  {data.visao_dia.pagamento.regra}
+                </p>
+              </div>
+              <div className="table-wrap neutra-dia-wrap">
+                <table className="data compact neutra-dia-table">
+                  <thead>
+                    <tr>
+                      <th className="neutra-dia-sticky">Técnico</th>
+                      <th className="neutra-dia-tipo-col">Tipo</th>
+                      {data.visao_dia.cols.map((c) => (
+                        <th
+                          key={c.key}
+                          className={
+                            c.fechamento
+                              ? `neutra-fechamento neutra-fechamento-${c.fechamento}`
+                              : undefined
+                          }
+                          title={
+                            c.fechamento === "1a"
+                              ? "Fechamento 1ª quinzena"
+                              : c.fechamento === "2a"
+                                ? "Fechamento 2ª quinzena"
+                                : undefined
+                          }
+                        >
+                          <span className="neutra-dia-num">{c.dia}</span>
+                          <span className="neutra-dia-wd">{c.weekday}</span>
+                          {c.fechamento === "1a" ? (
+                            <span className="neutra-fechamento-label">
+                              Fech. 1ª
+                            </span>
+                          ) : null}
+                          {c.fechamento === "2a" ? (
+                            <span className="neutra-fechamento-label">
+                              Fech. 2ª
+                            </span>
+                          ) : null}
+                        </th>
+                      ))}
+                      <th className="neutra-dia-sum">Total 1ª</th>
+                      <th className="neutra-dia-sum">Total 2ª</th>
+                      <th className="neutra-dia-sum">Total produtivas</th>
+                      <th className="neutra-dia-sum neutra-dia-improd-h">
+                        Total improdutivas
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.visao_dia.rows.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={2 + data.visao_dia.cols.length + 4}
+                        >
+                          Sem produção no mês.
+                        </td>
+                      </tr>
+                    ) : (
+                      <>
+                        {data.visao_dia.rows.map((row: NeutraVisaoDiaRow) => (
+                          <tr key={row.tt || row.nome}>
+                            <td
+                              className="neutra-dia-sticky"
+                              title={row.nome}
+                            >
+                              <span className="neutra-dia-nome">
+                                {row.nome}
+                              </span>
+                            </td>
+                            <td className="neutra-dia-tipo-col">
+                              <span
+                                className={
+                                  row.is_pj
+                                    ? "neutra-tipo neutra-tipo-pj"
+                                    : "neutra-tipo neutra-tipo-clt"
+                                }
+                              >
+                                {row.is_pj ? "PJ" : "CLT"}
+                              </span>
+                            </td>
+                            {row.por_dia.map((n, i) => {
+                              const col = data.visao_dia!.cols[i];
+                              return (
+                                <td
+                                  key={col.key}
+                                  className={
+                                    col.fechamento
+                                      ? `neutra-fechamento neutra-fechamento-${col.fechamento}`
+                                      : undefined
+                                  }
+                                >
+                                  {n || ""}
+                                </td>
+                              );
+                            })}
+                            <td className="neutra-dia-sum">{row.q1}</td>
+                            <td className="neutra-dia-sum">{row.q2}</td>
+                            <td className="neutra-dia-sum">
+                              {row.produtivas}
+                            </td>
+                            <td className="neutra-dia-sum cell-improd">
+                              {row.improdutivas}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="neutra-dia-total">
+                          <td className="neutra-dia-sticky">
+                            <span className="neutra-dia-nome">
+                              {data.visao_dia.total.nome}
+                            </span>
+                          </td>
+                          <td className="neutra-dia-tipo-col" />
+                          {data.visao_dia.total.por_dia.map((n, i) => {
+                            const col = data.visao_dia!.cols[i];
+                            return (
+                              <td
+                                key={col.key}
+                                className={
+                                  col.fechamento
+                                    ? `neutra-fechamento neutra-fechamento-${col.fechamento}`
+                                    : undefined
+                                }
+                              >
+                                {n || ""}
+                              </td>
+                            );
+                          })}
+                          <td className="neutra-dia-sum">
+                            {data.visao_dia.total.q1}
+                          </td>
+                          <td className="neutra-dia-sum">
+                            {data.visao_dia.total.q2}
+                          </td>
+                          <td className="neutra-dia-sum">
+                            {data.visao_dia.total.produtivas}
+                          </td>
+                          <td className="neutra-dia-sum cell-improd">
+                            {data.visao_dia.total.improdutivas}
+                          </td>
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
 
           <section className="painel-block" aria-labelledby="tab-neutra">
             <div className="painel-block-head">

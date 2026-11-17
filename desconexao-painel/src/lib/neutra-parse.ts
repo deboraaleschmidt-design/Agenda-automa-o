@@ -48,6 +48,46 @@ export type NeutraResumo = {
   valor_inst_mud: number;
 };
 
+/** Coluna de um dia no mês (visão por dia). */
+export type NeutraVisaoDiaCol = {
+  dia: number;
+  weekday: string;
+  key: string;
+  /** Corte visual: dia 15 = 1ª; último dia = 2ª. */
+  fechamento: "1a" | "2a" | null;
+};
+
+export type NeutraVisaoDiaRow = {
+  nome: string;
+  tt: string;
+  tipo: string;
+  is_pj: boolean;
+  /** Produtivas por dia do mês (índice = dia − 1). */
+  por_dia: number[];
+  q1: number;
+  q2: number;
+  produtivas: number;
+  improdutivas: number;
+};
+
+export type NeutraPagamentoQuinzena = {
+  q1_referencia: string;
+  q1_pago_em: string;
+  q1_pago_em_iso: string;
+  q2_referencia: string;
+  q2_pago_em: string;
+  q2_pago_em_iso: string;
+  regra: string;
+};
+
+export type NeutraVisaoDia = {
+  mes: string;
+  cols: NeutraVisaoDiaCol[];
+  rows: NeutraVisaoDiaRow[];
+  total: NeutraVisaoDiaRow;
+  pagamento: NeutraPagamentoQuinzena;
+};
+
 export type NeutraPayload = {
   atualizado_em: string;
   fonte: "sheets" | "fixture";
@@ -60,6 +100,8 @@ export type NeutraPayload = {
   mes: string;
   resumo: NeutraResumo;
   tecnicos: NeutraTechRow[];
+  /** Grade diária (só mês YYYY-MM; null em TOTAL). */
+  visao_dia: NeutraVisaoDia | null;
   avisos: string[];
   equipe: NeutraEquipeRow[];
 };
@@ -93,6 +135,7 @@ export function emptyNeutraPayload(
       valor_inst_mud: 0,
     },
     tecnicos: [],
+    visao_dia: null,
     avisos: [],
     equipe: [],
   };
