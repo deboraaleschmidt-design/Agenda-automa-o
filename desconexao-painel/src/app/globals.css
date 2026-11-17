@@ -1499,3 +1499,22 @@ table.data.cidade-mes td:first-child {
 .ops-note-list li + li {
   margin-top: 0.35rem;
 }
+
+/* Neutra — improdutivas em vermelho/vinho */
+.cell-improd {
+  color: var(--accent-deep);
+  font-weight: 600;
+}
+
+.kpi-improd .kpi-value {
+  color: var(--accent-deep);
+}
+
+.kpi-improd {
+  border-color: rgba(168, 31, 21, 0.35);
+  background: linear-gradient(
+    160deg,
+    rgba(218, 41, 28, 0.08),
+    var(--paper) 55%
+  );
+}

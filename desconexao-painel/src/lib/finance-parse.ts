@@ -16,10 +16,10 @@ export type FaturamentoMes = {
   periodo: string;
 };
 
-export type FinanceSegmento = "desconexao" | "iat" | "todos";
+export type FinanceSegmento = "desconexao" | "iat" | "neutra" | "todos";
 
 export type FinanceAtividade = {
-  segmento: "desconexao" | "iat";
+  segmento: "desconexao" | "iat" | "neutra";
   codigo: string;
   descricao: string;
   quantidade: number;
@@ -27,6 +27,15 @@ export type FinanceAtividade = {
   valor: number | null;
   sem_preco: boolean;
   origem_lpu: string;
+};
+
+export type FinanceTechOk = {
+  segmento: "neutra";
+  nome: string;
+  tt: string;
+  area: string;
+  servicos_ok: number;
+  valor: number;
 };
 
 export type FinanceSubtotal = {
@@ -47,14 +56,18 @@ export type FinancePayload = {
   lpu_origem: {
     desconexao: string;
     iat: string;
+    neutra: string;
     valor_hora_iat: number | null;
   };
   atividades: FinanceAtividade[];
   subtotais: {
     desconexao: FinanceSubtotal;
     iat: FinanceSubtotal;
+    neutra: FinanceSubtotal;
     geral: FinanceSubtotal;
   };
+  /** Total OK TCI por técnico (Neutra). */
+  ok_tci_tecnicos: FinanceTechOk[];
   quinzena_titulo: string;
   a_pagar: APagarLinha[];
   total_a_pagar: number;
@@ -88,10 +101,17 @@ export function emptyFinancePayload(
     lpu_origem: {
       desconexao: "LPU · Desconexão",
       iat: "LPU · IAT",
+      neutra: "LPU · Neutra (TELEMONT 1)",
       valor_hora_iat: null,
     },
     atividades: [],
-    subtotais: { desconexao: zero, iat: { ...zero }, geral: { ...zero } },
+    subtotais: {
+      desconexao: zero,
+      iat: { ...zero },
+      neutra: { ...zero },
+      geral: { ...zero },
+    },
+    ok_tci_tecnicos: [],
     quinzena_titulo: "",
     a_pagar: [],
     total_a_pagar: 0,

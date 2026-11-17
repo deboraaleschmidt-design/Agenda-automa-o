@@ -7,6 +7,7 @@ import {
   type FinancePayload,
   type FinanceSegmento,
   type FinanceSubtotal,
+  type FinanceTechOk,
 } from "./finance-parse";
 import {
   listMesesBase,
@@ -20,9 +21,22 @@ import {
   menorPrecoDesconexao,
   parseLpuDesconexao,
   parseLpuIat,
+  parseLpuTelemont1,
   precoDesconexaoPorServico,
   type LpuItem,
 } from "./lpu-parse";
+import {
+  isInstMud,
+  isRetirada,
+  listMesesNeutra,
+  parseBaseNeutraRegs,
+  parseEquipeNeutra,
+  PRECO_COM_DROP,
+  PRECO_MESH,
+  PRECO_RETIRADA,
+  PRECO_SEM_DROP,
+  type NeutraReg,
+} from "./neutra-engine";
 import {
   findRespostasHeaderIndex,
   isMesOrTotal,
@@ -35,12 +49,14 @@ import {
   SPREADSHEET_D1_ID,
   SPREADSHEET_ID,
   SPREADSHEET_LPU_ID,
+  SPREADSHEET_NEUTRA_ID,
 } from "./types";
 
-/** Títulos reais das abas no Sheets (API). Nunca exibir na UI — só T.ESTRATÉGICO / LPU · Desconexão / LPU · IAT / Faturar. */
+/** Títulos reais das abas no Sheets (API). Nunca exibir na UI — só T.ESTRATÉGICO / LPU · Desconexão / LPU · IAT / LPU · Neutra / Faturar. */
 const SHEET_FATURAR = "'FATURAR CLARO'!A1:E40";
 const SHEET_LPU_DES = "'CLARO DESCONEXÃO'!A1:E40";
 const SHEET_LPU_IAT = "'CLARO IAT'!A1:G220";
+const SHEET_LPU_NEUTRA = "'TELEMONT 1'!A1:F40";
 
 function fold(v: unknown): string {
   return String(v ?? "")
@@ -71,6 +87,7 @@ function normalizeSegmento(raw: string): FinanceSegmento {
   const u = raw.trim().toLowerCase();
   if (u === "desconexao" || u === "desconexão") return "desconexao";
   if (u === "iat") return "iat";
+  if (u === "neutra") return "neutra";
   return "todos";
 }
 
@@ -354,12 +371,194 @@ function buildIatAtividades(
   return { lines, avisos, meses, gabrielNota };
 }
 
-/** Meses disponíveis = Desconexão (FATURAR AGO+) ∪ IAT (BASE ≥ 01/10). */
+/** Neutra: INST/MUD com/sem drop; Mesh; Retirada; demais → sem preço. */
+function buildNeutraAtividades(
+  regs: NeutraReg[],
+  mes: string,
+  prices: {
+    comDrop: number | null;
+    semDrop: number | null;
+    mesh: number | null;
+    retirada: number | null;
+  },
+): {
+  lines: FinanceAtividade[];
+  avisos: string[];
+  meses: string[];
+  okTecnicos: FinanceTechOk[];
+} {
+  const avisos: string[] = [];
+  const meses = listMesesNeutra(regs);
+  const maxKey = regs.reduce((m, r) => (r.dt.key > m ? r.dt.key : m), "");
+  let start = "2000-01-01";
+  let end = maxKey || "2099-12-31";
+  if (mes.trim().toUpperCase() !== "TOTAL") {
+    const [ys, ms] = mes.trim().split("-");
+    const y = Number(ys);
+    const m = Number(ms);
+    start = `${y}-${pad(m)}-01`;
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    end = `${y}-${pad(m)}-${pad(lastDay)}`;
+    if (maxKey && end > maxKey) end = maxKey;
+  }
+
+  const filtered = regs.filter(
+    (r) =>
+      r.estado === "produtiva" && r.dt.key >= start && r.dt.key <= end,
+  );
+
+  const comP = prices.comDrop ?? PRECO_COM_DROP;
+  const semP = prices.semDrop ?? PRECO_SEM_DROP;
+  const meshP = prices.mesh ?? PRECO_MESH;
+  const retP = prices.retirada ?? PRECO_RETIRADA;
+
+  type Bucket = {
+    codigo: string;
+    descricao: string;
+    qtd: number;
+    preco: number | null;
+    sem: boolean;
+  };
+  const buckets = new Map<string, Bucket>();
+  const bump = (
+    codigo: string,
+    descricao: string,
+    preco: number | null,
+    sem: boolean,
+    n = 1,
+  ) => {
+    const key = `${codigo}|${descricao}|${preco ?? "x"}|${sem ? 1 : 0}`;
+    const cur = buckets.get(key) || { codigo, descricao, qtd: 0, preco, sem };
+    cur.qtd += n;
+    buckets.set(key, cur);
+  };
+
+  let meshEquipTotal = 0;
+  let meshLinhas = 0;
+  let semPreco = 0;
+  const perTech = new Map<
+    string,
+    { nome: string; tt: string; area: string; qtd: number; valor: number }
+  >();
+
+  for (const r of filtered) {
+    let valorLinha = 0;
+    let okPriced = false;
+    if (isInstMud(r.macro)) {
+      const preco = r.drop ? comP : semP;
+      const desc = r.drop
+        ? "INSTALAÇÃO / MUDANÇA COM REAPROVEITAMENTO DE DROP"
+        : "INSTALAÇÃO / MUDANÇA SEM REAPROVEITAMENTO DE DROP";
+      const codigo = r.drop ? "INST-MUD-COM-DROP" : "INST-MUD-SEM-DROP";
+      bump(codigo, desc, preco, preco == null);
+      if (preco == null) semPreco += 1;
+      else {
+        valorLinha += preco;
+        okPriced = true;
+      }
+    } else if (isRetirada(r.macro)) {
+      bump("RETIRADA", "RETIRADA", retP, retP == null);
+      if (retP == null) semPreco += 1;
+      else {
+        valorLinha += retP;
+        okPriced = true;
+      }
+    } else {
+      bump(
+        r.macro || "—",
+        `Macro ${r.macro || "—"} (sem preço LPU Neutra)`,
+        null,
+        true,
+      );
+      semPreco += 1;
+    }
+
+    if (r.meshEquip > 0) {
+      meshLinhas += 1;
+      meshEquipTotal += r.meshEquip;
+      bump(
+        "MESH",
+        "INSTALAÇÃO REDE MESH (por equipamento)",
+        meshP,
+        meshP == null,
+        r.meshEquip,
+      );
+      if (meshP == null) semPreco += r.meshEquip;
+      else {
+        valorLinha += r.meshEquip * meshP;
+        okPriced = true;
+      }
+    }
+
+    if (okPriced) {
+      const cur = perTech.get(r.tt) || {
+        nome: r.nome,
+        tt: r.tt,
+        area: r.area,
+        qtd: 0,
+        valor: 0,
+      };
+      cur.qtd += 1;
+      cur.valor = Math.round((cur.valor + valorLinha) * 100) / 100;
+      perTech.set(r.tt, cur);
+    }
+  }
+
+  if (meshEquipTotal === 0) {
+    avisos.push(
+      "Neutra: mesh ainda não disponível na base → 0 equipamentos mesh.",
+    );
+  } else {
+    avisos.push(
+      `Neutra: mesh ${meshEquipTotal} equip. em ${meshLinhas} SA(s) · R$ ${(meshP ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/equip.`,
+    );
+  }
+  if (semPreco) {
+    avisos.push(
+      `Neutra: ${semPreco} serviço(s) sem preço LPU (exibidos como «sem preço»).`,
+    );
+  }
+  avisos.push(
+    "Neutra: pagamento a técnico NÃO INFORMADO — só faturamento LPU TELEMONT 1.",
+  );
+
+  const lines: FinanceAtividade[] = [...buckets.values()]
+    .map((b) => ({
+      segmento: "neutra" as const,
+      codigo: b.codigo,
+      descricao: b.descricao,
+      quantidade: b.qtd,
+      preco_unitario: b.preco,
+      valor:
+        b.sem || b.preco == null
+          ? null
+          : Math.round(b.qtd * b.preco * 100) / 100,
+      sem_preco: b.sem,
+      origem_lpu: "LPU · Neutra (TELEMONT 1)",
+    }))
+    .sort((a, b) => b.quantidade - a.quantidade);
+
+  const okTecnicos: FinanceTechOk[] = [...perTech.values()]
+    .map((t) => ({
+      segmento: "neutra" as const,
+      nome: t.nome,
+      tt: t.tt,
+      area: t.area,
+      servicos_ok: t.qtd,
+      valor: t.valor,
+    }))
+    .sort((a, b) => b.valor - a.valor);
+
+  return { lines, avisos, meses, okTecnicos };
+}
+
+/** Meses disponíveis = Desconexão (FATURAR AGO+) ∪ IAT (BASE ≥ 01/10) ∪ Neutra. */
 function mergeMeses(
   fatMeses: { mes: string }[],
   iatMeses: string[],
+  neutraMeses: string[] = [],
 ): string[] {
-  const set = new Set<string>(iatMeses);
+  const set = new Set<string>([...iatMeses, ...neutraMeses]);
   const names: Record<string, number> = {
     janeiro: 1,
     fevereiro: 2,
@@ -414,7 +613,7 @@ export async function syncFinanceiro(opts?: {
   }
 
   try {
-    const [desRes, d1Res, lpuRes] = await Promise.all([
+    const [desRes, d1Res, neutraRes, lpuRes] = await Promise.all([
       auth.sheets.spreadsheets.values.batchGet({
         spreadsheetId: SPREADSHEET_ID,
         ranges: [
@@ -429,9 +628,18 @@ export async function syncFinanceiro(opts?: {
         ranges: ["'BASE IAT'!A1:DO", "EQUIPE!A1:F40"],
         valueRenderOption: "FORMATTED_VALUE",
       }),
+      SPREADSHEET_NEUTRA_ID
+        ? auth.sheets.spreadsheets.values.batchGet({
+            spreadsheetId: SPREADSHEET_NEUTRA_ID,
+            ranges: ["'BASE NEUTRA'!A1:Z", "'EQUIPE NEUTRA'!A1:H80"],
+            valueRenderOption: "FORMATTED_VALUE",
+          })
+        : Promise.resolve({
+            data: { valueRanges: [] as { values?: unknown[][] }[] },
+          }),
       auth.sheets.spreadsheets.values.batchGet({
         spreadsheetId: SPREADSHEET_LPU_ID,
-        ranges: [SHEET_LPU_DES, SHEET_LPU_IAT],
+        ranges: [SHEET_LPU_DES, SHEET_LPU_IAT, SHEET_LPU_NEUTRA],
         valueRenderOption: "FORMATTED_VALUE",
       }),
     ]);
@@ -445,9 +653,14 @@ export async function syncFinanceiro(opts?: {
     const baseRows = d1Ranges[0]?.values || [];
     const eqRows = d1Ranges[1]?.values || [];
 
+    const neutraRanges = neutraRes.data.valueRanges || [];
+    const neutraBase = neutraRanges[0]?.values || [];
+    const neutraEq = neutraRanges[1]?.values || [];
+
     const lpuRanges = lpuRes.data.valueRanges || [];
     const lpuDes = parseLpuDesconexao(lpuRanges[0]?.values || []);
     const lpuIat = parseLpuIat(lpuRanges[1]?.values || []);
+    const lpuNeutra = parseLpuTelemont1(lpuRanges[2]?.values || []);
 
     const pagar = parseAPagar(recolhas);
     const fat = parseFaturamento(faturar);
@@ -457,17 +670,40 @@ export async function syncFinanceiro(opts?: {
     const { regs } = parseBaseIatRegs(baseRows);
     const iat = buildIatAtividades(regs, eqRows, mes, lpuIat.items);
 
+    const neutraEquipe = parseEquipeNeutra(neutraEq);
+    const { regs: neutraRegs, avisos: neutraParseAvisos } = SPREADSHEET_NEUTRA_ID
+      ? parseBaseNeutraRegs(neutraBase, neutraEquipe)
+      : {
+          regs: [] as NeutraReg[],
+          avisos: [
+            "Neutra: GOOGLE_SHEETS_NEUTRA_ID / GOOGLE_SHEETS_D1_ID não configurado (sem id fixo no código).",
+          ],
+        };
+    const neutra = buildNeutraAtividades(neutraRegs, mes, {
+      comDrop: lpuNeutra.comDrop,
+      semDrop: lpuNeutra.semDrop,
+      mesh: lpuNeutra.mesh,
+      retirada: lpuNeutra.retirada,
+    });
+
     const showDes = segmento === "desconexao" || segmento === "todos";
     const showIat = segmento === "iat" || segmento === "todos";
+    const showNeutra = segmento === "neutra" || segmento === "todos";
     const atividades = [
       ...(showDes ? des.lines : []),
       ...(showIat ? iat.lines : []),
+      ...(showNeutra ? neutra.lines : []),
     ];
 
     const subDes = subtotalOf(des.lines, pagar.total);
     const subIat = subtotalOf(iat.lines, null);
+    const subNeutra = subtotalOf(neutra.lines, null);
     const subGeral = subtotalOf(
-      [...(showDes ? des.lines : []), ...(showIat ? iat.lines : [])],
+      [
+        ...(showDes ? des.lines : []),
+        ...(showIat ? iat.lines : []),
+        ...(showNeutra ? neutra.lines : []),
+      ],
       showDes ? pagar.total : null,
     );
 
@@ -488,12 +724,14 @@ export async function syncFinanceiro(opts?: {
     const duvidas = [
       ...des.avisos,
       ...iat.avisos,
+      ...(showNeutra ? neutraParseAvisos : []),
+      ...(showNeutra ? neutra.avisos : []),
       ...(fatAviso ? [fatAviso] : []),
       "Pagamento a técnico IAT: NÃO INFORMADO — não inventado.",
       iat.gabrielNota,
     ];
 
-    const meses_disponiveis = mergeMeses(fat.meses, iat.meses);
+    const meses_disponiveis = mergeMeses(fat.meses, iat.meses, neutra.meses);
 
     return {
       atualizado_em: new Date().toISOString(),
@@ -510,14 +748,17 @@ export async function syncFinanceiro(opts?: {
             ? ` · VALOR HS R$ ${lpuIat.valorHora.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
             : ""
         }`,
+        neutra: "LPU · Neutra (TELEMONT 1 · INST/MUD 150/170 · Mesh 49,80 · Retirada 96,23)",
         valor_hora_iat: lpuIat.valorHora,
       },
       atividades,
       subtotais: {
         desconexao: subDes,
         iat: subIat,
+        neutra: subNeutra,
         geral: subGeral,
       },
+      ok_tci_tecnicos: showNeutra ? neutra.okTecnicos : [],
       quinzena_titulo: pagar.titulo,
       a_pagar: showDes ? pagar.linhas : [],
       total_a_pagar: showDes ? pagar.total : 0,
@@ -533,7 +774,7 @@ export async function syncFinanceiro(opts?: {
     return emptyFinancePayload(
       mes,
       segmento,
-      `Falha ao ler financeiro/LPU/IAT: ${msg}`,
+      `Falha ao ler financeiro/LPU/IAT/Neutra: ${msg}`,
     );
   }
 }
