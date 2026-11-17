@@ -1500,21 +1500,24 @@ table.data.cidade-mes td:first-child {
   margin-top: 0.35rem;
 }
 
-/* Neutra — improdutivas em vermelho/vinho */
+/* Neutra — improdutivas em vermelho/vinho (contraste legível) */
 .cell-improd {
   color: var(--accent-deep);
   font-weight: 600;
 }
 
-.kpi-improd .kpi-value {
-  color: var(--accent-deep);
+.kpi-improd {
+  background: #85200c;
+  color: #fff;
+  border-color: #6b1a0a;
+  box-shadow: 0 6px 18px rgba(133, 32, 12, 0.28);
 }
 
-.kpi-improd {
-  border-color: rgba(168, 31, 21, 0.35);
-  background: linear-gradient(
-    160deg,
-    rgba(218, 41, 28, 0.08),
-    var(--paper) 55%
-  );
+.kpi-improd .kpi-label,
+.kpi-improd .kpi-hint {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.kpi-improd .kpi-value {
+  color: #fff;
 }
