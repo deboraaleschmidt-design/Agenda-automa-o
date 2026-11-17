@@ -6,6 +6,7 @@ import {
   isMesOrTotal,
   parseCidadesFromPainel,
   parsePainelMeta,
+  parseRankingFromDesconexaoD1,
   resolveGradeForMes,
   resolveKpisForMes,
   resolveTiposForMes,
@@ -19,6 +20,7 @@ import {
   EMPRESA_SEED_ID,
   NOME_PUBLICO,
   SETOR_DESCONEXAO,
+  SPREADSHEET_D1_ID,
   SPREADSHEET_ID,
   type PainelPayload,
 } from "./types";
@@ -137,22 +139,42 @@ async function readFromSheets(
   const spreadsheetId = SPREADSHEET_ID;
 
   // Wide PAINEL — parse by title (KPIs, grade, cidade, evolução, tipos).
-  const res = await sheets.spreadsheets.values.batchGet({
-    spreadsheetId,
-    ranges: ["PAINEL!A1:AR80", "'Respostas ao formulário 1'!A1:S"],
-    valueRenderOption: "UNFORMATTED_VALUE",
-  });
+  // Ranking nomes: aba DESCONEXÃO da D-1 (TCI individual, sem “TCI” genérico).
+  const [res, d1Res] = await Promise.all([
+    sheets.spreadsheets.values.batchGet({
+      spreadsheetId,
+      ranges: ["PAINEL!A1:AR80", "'Respostas ao formulário 1'!A1:S"],
+      valueRenderOption: "UNFORMATTED_VALUE",
+    }),
+    SPREADSHEET_D1_ID
+      ? sheets.spreadsheets.values.batchGet({
+          spreadsheetId: SPREADSHEET_D1_ID,
+          ranges: ["'DESCONEXÃO'!A1:AG40"],
+          valueRenderOption: "FORMATTED_VALUE",
+        })
+      : Promise.resolve({ data: { valueRanges: [] as { values?: unknown[][] }[] } }),
+  ]);
 
   const ranges = res.data.valueRanges || [];
   const painelRows = ranges[0]?.values || [];
   const respostas = ranges[1]?.values || [];
+  const d1Des = d1Res.data.valueRanges?.[0]?.values || [];
 
   const meta = parsePainelMeta(painelRows);
   const kpis = resolveKpisForMes(painelRows, respostas, mes);
   const grade = resolveGradeForMes(painelRows, respostas, mes);
   const cidades = parseCidadesFromPainel(painelRows);
   const tipos = resolveTiposForMes(painelRows, mes);
-  const ranking = buildRankingFromGrade(grade.colunas, grade.totais);
+  const gradeRanking = buildRankingFromGrade(grade.colunas, grade.totais);
+  const d1Rank = parseRankingFromDesconexaoD1(d1Des);
+  const mesReq = mes.trim().toUpperCase();
+  const useD1 =
+    d1Rank.ranking.length > 0 &&
+    (mesReq === "TOTAL" ||
+      !d1Rank.mesYm ||
+      mesReq === d1Rank.mesYm ||
+      mes === d1Rank.mesYm);
+  const ranking = useD1 ? d1Rank.ranking : gradeRanking;
   const mesLabel =
     mes.trim().toUpperCase() === "TOTAL" ? "TOTAL (período completo)" : mes;
 

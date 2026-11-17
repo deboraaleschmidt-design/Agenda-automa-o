@@ -17,14 +17,16 @@ export async function syncIat(mes = "TOTAL"): Promise<IatPayload> {
   try {
     const res = await auth.sheets.spreadsheets.values.batchGet({
       spreadsheetId: SPREADSHEET_D1_ID,
-      ranges: ["'BASE IAT'!A1:DO", "EQUIPE!A1:F40"],
+      ranges: ["'BASE IAT'!A1:DO", "'PROMPT IAT'!A1:DO", "EQUIPE!A1:F40"],
       valueRenderOption: "FORMATTED_VALUE",
     });
     const ranges = res.data.valueRanges || [];
     const baseRows = ranges[0]?.values || [];
-    const eqRows = ranges[1]?.values || [];
+    const promptRows = ranges[1]?.values || [];
+    const eqRows = ranges[2]?.values || [];
     const built = buildIatFromBase({
       baseRows,
+      promptRows,
       equipeRows: eqRows,
       mes,
     });

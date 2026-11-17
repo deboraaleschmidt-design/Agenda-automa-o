@@ -827,17 +827,23 @@ body.painel-page,
 }
 
 .kpi {
-  background: var(--accent);
+  background: linear-gradient(145deg, var(--steel), #3d5166);
   color: #fff;
   padding: 1rem 0.9rem 0.95rem;
   border-radius: var(--radius);
   text-align: center;
-  box-shadow: 0 6px 18px rgba(218, 41, 28, 0.18);
+  border: none;
+  box-shadow: 0 6px 18px rgba(42, 58, 74, 0.22);
   transition: transform 0.2s ease;
 }
 
 .kpi:hover {
   transform: translateY(-2px);
+}
+
+.kpi .kpi-label,
+.kpi .kpi-hint {
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .kpi-label {
@@ -1355,6 +1361,31 @@ table.data.cidade-mes td:first-child {
   font-size: 0.7rem;
   color: var(--muted);
   margin-top: 0.4rem;
+}
+
+/* OPEX — lucro (ok) / prejuízo (escuro + texto branco) */
+.kpi-ok {
+  background: linear-gradient(145deg, #1f6b4a, #155339);
+  color: #fff;
+  border: none;
+}
+
+.kpi-ok .kpi-label,
+.kpi-ok .kpi-hint,
+.kpi-ok .kpi-value {
+  color: #fff;
+}
+
+.kpi-loss {
+  background: linear-gradient(145deg, #1c2a38, #101820);
+  color: #fff;
+  border: none;
+}
+
+.kpi-loss .kpi-label,
+.kpi-loss .kpi-hint,
+.kpi-loss .kpi-value {
+  color: #fff;
 }
 
 .kpi-muted {

@@ -9,9 +9,10 @@ import {
   type FinanceSubtotal,
   type FinanceTechOk,
 } from "./finance-parse";
+import { buildFinanceOpex } from "./finance-opex";
 import {
   listMesesBase,
-  parseBaseIatRegs,
+  mergeBaseAndPromptIat,
   resolveMesRange,
   type IatReg,
 } from "./iat-base-engine";
@@ -625,7 +626,7 @@ export async function syncFinanceiro(opts?: {
       }),
       auth.sheets.spreadsheets.values.batchGet({
         spreadsheetId: SPREADSHEET_D1_ID,
-        ranges: ["'BASE IAT'!A1:DO", "EQUIPE!A1:F40"],
+        ranges: ["'BASE IAT'!A1:DO", "'PROMPT IAT'!A1:DO", "EQUIPE!A1:F40"],
         valueRenderOption: "FORMATTED_VALUE",
       }),
       SPREADSHEET_NEUTRA_ID
@@ -651,7 +652,8 @@ export async function syncFinanceiro(opts?: {
 
     const d1Ranges = d1Res.data.valueRanges || [];
     const baseRows = d1Ranges[0]?.values || [];
-    const eqRows = d1Ranges[1]?.values || [];
+    const promptRows = d1Ranges[1]?.values || [];
+    const eqRows = d1Ranges[2]?.values || [];
 
     const neutraRanges = neutraRes.data.valueRanges || [];
     const neutraBase = neutraRanges[0]?.values || [];
@@ -667,7 +669,7 @@ export async function syncFinanceiro(opts?: {
     const fatFiltrado = filterFaturamentoPorMes(fat.meses, mes);
 
     const des = buildDesconexaoAtividades(respostas, mes, lpuDes);
-    const { regs } = parseBaseIatRegs(baseRows);
+    const { regs, promptDays } = mergeBaseAndPromptIat(baseRows, promptRows);
     const iat = buildIatAtividades(regs, eqRows, mes, lpuIat.items);
 
     const neutraEquipe = parseEquipeNeutra(neutraEq);
@@ -727,11 +729,54 @@ export async function syncFinanceiro(opts?: {
       ...(showNeutra ? neutraParseAvisos : []),
       ...(showNeutra ? neutra.avisos : []),
       ...(fatAviso ? [fatAviso] : []),
-      "Pagamento a técnico IAT: NÃO INFORMADO — não inventado.",
+      ...(promptDays.length
+        ? [
+            `IAT: PROMPT usado nos dias ausentes na BASE (${promptDays
+              .map((k) => `${k.slice(8, 10)}/${k.slice(5, 7)}`)
+              .join(", ")}).`,
+          ]
+        : []),
       iat.gabrielNota,
     ];
 
     const meses_disponiveis = mergeMeses(fat.meses, iat.meses, neutra.meses);
+
+    const receitaSeg =
+      segmento === "desconexao"
+        ? subDes.valor_faturar
+        : segmento === "iat"
+          ? subIat.valor_faturar
+          : segmento === "neutra"
+            ? subNeutra.valor_faturar
+            : subGeral.valor_faturar;
+    const semPrecoSeg =
+      segmento === "desconexao"
+        ? subDes.sem_preco
+        : segmento === "iat"
+          ? subIat.sem_preco
+          : segmento === "neutra"
+            ? subNeutra.sem_preco
+            : subGeral.sem_preco;
+
+    const neutraEquipeByTt = new Map<
+      string,
+      { nome: string; tipo: string }
+    >();
+    for (const e of neutraEquipe) {
+      if (e.tt) neutraEquipeByTt.set(e.tt, { nome: e.nome, tipo: e.tipo });
+    }
+    const eqList = parseEquipe(eqRows);
+    const opexPack = buildFinanceOpex({
+      segmento,
+      mes,
+      receita: receitaSeg,
+      semPreco: semPrecoSeg,
+      aPagar: pagar.linhas,
+      iatRegs: regs,
+      iatEquipe: eqList,
+      neutraRegs,
+      neutraEquipeByTt,
+    });
 
     return {
       atualizado_em: new Date().toISOString(),
@@ -741,6 +786,12 @@ export async function syncFinanceiro(opts?: {
       mes,
       segmento,
       meses_disponiveis,
+      setores: [
+        { id: "desconexao", label: "DESCONEXÃO" },
+        { id: "iat", label: "IAT" },
+        { id: "neutra", label: "NEUTRA" },
+        { id: "todos", label: "TODOS" },
+      ],
       lpu_origem: {
         desconexao: "LPU · Desconexão (preço bruto c/ impostos)",
         iat: `LPU · IAT${
@@ -763,9 +814,12 @@ export async function syncFinanceiro(opts?: {
       a_pagar: showDes ? pagar.linhas : [],
       total_a_pagar: showDes ? pagar.total : 0,
       a_pagar_iat_nota:
-        "IAT: sem tabela de pagamento a técnico na planilha — só faturamento LPU.",
+        "IAT: pagamento PJ R$90/atividade · CLT salário provisório (prévia OPEX).",
       faturamento_meses: fatFiltrado.length ? fatFiltrado : fat.meses,
       faturamento_ago_mais: fat.agoMais,
+      pagamento_quinzenas: opexPack.quinzenas,
+      visao_mensal: opexPack.mensal,
+      opex: opexPack.opex,
       duvidas,
       gabriel_nota: iat.gabrielNota,
     };
