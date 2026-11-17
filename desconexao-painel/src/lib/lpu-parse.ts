@@ -97,6 +97,46 @@ export function parseLpuIat(rows: unknown[][]): {
   return { items, valorHora };
 }
 
+/**
+ * LPU TELEMONT 1 — preços Neutra (CHAVE | REGIONAL | CLIENTE | ATIVIDADE | V.U. TETO).
+ * Só itens de INSTALAÇÃO REDE NEUTRA / correlatos usados no financeiro Neutra.
+ */
+export function parseLpuTelemont1(rows: unknown[][]): {
+  items: LpuItem[];
+  comDrop: number | null;
+  semDrop: number | null;
+  mesh: number | null;
+  retirada: number | null;
+} {
+  const items: LpuItem[] = [];
+  let comDrop: number | null = null;
+  let semDrop: number | null = null;
+  let mesh: number | null = null;
+  let retirada: number | null = null;
+  for (let i = 0; i < rows.length; i++) {
+    const chave = cell(rows[i], 0);
+    const atividade = cell(rows[i], 3);
+    if (!chave && !atividade) continue;
+    if (fold(chave) === "CHAVE") continue;
+    const preco = money(rows[i]?.[4]);
+    const desc = chave || atividade;
+    const fd = fold(desc);
+    items.push({
+      codigo: chave.slice(0, 24) || "—",
+      descricao: desc,
+      preco,
+      situacao: preco == null ? "Sem valor informado" : "Tabela",
+      foldDesc: fd,
+    });
+    if (fd.includes("COM REAPROVEITAMENTO DE DROP")) comDrop = preco;
+    else if (fd.includes("SEM REAPROVEITAMENTO DE DROP")) semDrop = preco;
+    else if (fd.includes("REDE MESH") || fd.includes("INSTALACAO REDE MESH"))
+      mesh = preco;
+    else if (fd === "RETIRADA" || fd.startsWith("RETIRADA")) retirada = preco;
+  }
+  return { items, comDrop, semDrop, mesh, retirada };
+}
+
 /** Menor preço positivo da LPU Desconexão (entrega de controle). */
 export function menorPrecoDesconexao(items: LpuItem[]): number | null {
   let min: number | null = null;

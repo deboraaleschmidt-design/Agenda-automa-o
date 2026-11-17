@@ -65,6 +65,7 @@ export type PainelPayload = {
 
 export const SETOR_DESCONEXAO = "desconexao";
 export const SETOR_IAT = "iat";
+export const SETOR_NEUTRA = "neutra";
 export const SETOR_FINANCEIRO = "financeiro";
 export const EMPRESA_SEED_ID = "11111111-1111-4111-8111-111111111111";
 export const NOME_PUBLICO = "T.ESTRATÉGICO";
@@ -75,6 +76,15 @@ export const SPREADSHEET_ID =
 export const SPREADSHEET_D1_ID =
   process.env.GOOGLE_SHEETS_D1_ID?.trim() ||
   "1u8Ng_a0Pu2eO2FfzJFGJ1bF4s6wldkkfMU7AoGAyUVM";
+/**
+ * Planilha Neutra (abas BASE NEUTRA / EQUIPE NEUTRA).
+ * Só via env — GOOGLE_SHEETS_NEUTRA_ID ou, se ausente, GOOGLE_SHEETS_D1_ID.
+ * Sem id hardcoded.
+ */
+export const SPREADSHEET_NEUTRA_ID =
+  process.env.GOOGLE_SHEETS_NEUTRA_ID?.trim() ||
+  process.env.GOOGLE_SHEETS_D1_ID?.trim() ||
+  "";
 /** LPU GERAL TCI — preços oficiais (só leitura). */
 export const SPREADSHEET_LPU_ID =
   process.env.GOOGLE_SHEETS_LPU_ID?.trim() ||

@@ -62,7 +62,12 @@ function FinanceiroInner() {
     const mesQ = params.get("mes")?.trim();
     const segQ = params.get("segmento")?.trim().toLowerCase();
     if (mesQ) setMes(mesQ);
-    if (segQ === "desconexao" || segQ === "iat" || segQ === "todos") {
+    if (
+      segQ === "desconexao" ||
+      segQ === "iat" ||
+      segQ === "neutra" ||
+      segQ === "todos"
+    ) {
       setSegmento(segQ);
     }
     setReady(true);
@@ -119,10 +124,13 @@ function FinanceiroInner() {
       ? data?.subtotais.desconexao
       : segmento === "iat"
         ? data?.subtotais.iat
-        : data?.subtotais.geral;
+        : segmento === "neutra"
+          ? data?.subtotais.neutra
+          : data?.subtotais.geral;
 
   const showDes = segmento === "desconexao" || segmento === "todos";
   const showIat = segmento === "iat" || segmento === "todos";
+  const showNeutra = segmento === "neutra" || segmento === "todos";
 
   return (
     <div className="painel-page painel-ops">
@@ -131,7 +139,7 @@ function FinanceiroInner() {
         role="status"
       >
         {data?.fonte === "sheets"
-          ? "AO VIVO · T.ESTRATÉGICO · Financeiro Desconexão + IAT"
+          ? "AO VIVO · T.ESTRATÉGICO · Financeiro Desconexão + IAT + Neutra"
           : data?.mensagem || "Aguardando Sheets"}
       </div>
       <header className="painel-header">
@@ -166,6 +174,7 @@ function FinanceiroInner() {
                 <option value="todos">Todos</option>
                 <option value="desconexao">Desconexão</option>
                 <option value="iat">IAT</option>
+                <option value="neutra">Neutra</option>
               </select>
             </label>
             <button
@@ -186,8 +195,11 @@ function FinanceiroInner() {
               <p className="ops-kicker">Faturamento LPU · só leitura</p>
               <h1 className="ops-title">{monthLabel(mes)}</h1>
               <p className="ops-sub">
-                {data?.lpu_origem.desconexao}
-                {showIat ? ` · ${data?.lpu_origem.iat}` : ""}
+                {showDes ? data?.lpu_origem.desconexao : null}
+                {showDes && showIat ? " · " : null}
+                {showIat ? data?.lpu_origem.iat : null}
+                {(showDes || showIat) && showNeutra ? " · " : null}
+                {showNeutra ? data?.lpu_origem.neutra : null}
               </p>
             </div>
           </div>
@@ -200,10 +212,12 @@ function FinanceiroInner() {
               <div className="kpi-value">{sub?.servicos ?? "—"}</div>
               <div className="kpi-hint">
                 {segmento === "todos"
-                  ? "Desconexão + IAT"
+                  ? "Desconexão + IAT + Neutra"
                   : segmento === "iat"
                     ? "IAT · BASE desde 01/10"
-                    : "Desconexão · Respostas"}
+                    : segmento === "neutra"
+                      ? "Neutra · BASE INST/MUD"
+                      : "Desconexão · Respostas"}
               </div>
             </article>
             <article className="kpi reveal reveal-delay-1">
@@ -269,7 +283,11 @@ function FinanceiroInner() {
                     (data?.atividades || []).map((a, i) => (
                       <tr key={`${a.segmento}-${a.codigo}-${i}`}>
                         <td>
-                          {a.segmento === "iat" ? "IAT" : "Desconexão"}
+                          {a.segmento === "iat"
+                            ? "IAT"
+                            : a.segmento === "neutra"
+                              ? "Neutra"
+                              : "Desconexão"}
                         </td>
                         <td>{a.codigo}</td>
                         <td>
@@ -301,7 +319,9 @@ function FinanceiroInner() {
                         ? "geral"
                         : segmento === "iat"
                           ? "IAT"
-                          : "Desconexão"}
+                          : segmento === "neutra"
+                            ? "Neutra"
+                            : "Desconexão"}
                     </td>
                     <td>{sub?.servicos ?? 0}</td>
                     <td />
@@ -311,10 +331,74 @@ function FinanceiroInner() {
               </table>
             </div>
             <p className="painel-foot" style={{ padding: "0.75rem 1rem" }}>
-              Origem: {data?.lpu_origem.desconexao}
-              {showIat ? ` · ${data?.lpu_origem.iat}` : ""}
+              Origem:{" "}
+              {[
+                showDes ? data?.lpu_origem.desconexao : null,
+                showIat ? data?.lpu_origem.iat : null,
+                showNeutra ? data?.lpu_origem.neutra : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
           </section>
+
+          {showNeutra ? (
+            <section className="painel-block" aria-labelledby="ok-tci-title">
+              <div className="painel-block-head">
+                <h2 id="ok-tci-title">Total OK TCI · por técnico</h2>
+                <span>Neutra · produtivas com preço LPU</span>
+              </div>
+              <div className="table-wrap">
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>Técnico</th>
+                      <th>TT</th>
+                      <th>Área</th>
+                      <th>Serviços OK</th>
+                      <th>A faturar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.ok_tci_tecnicos || []).length === 0 ? (
+                      <tr>
+                        <td colSpan={5}>Sem OK TCI no período.</td>
+                      </tr>
+                    ) : (
+                      (data?.ok_tci_tecnicos || []).map((t) => (
+                        <tr key={t.tt}>
+                          <td>{t.nome}</td>
+                          <td>{t.tt}</td>
+                          <td>{t.area}</td>
+                          <td>{t.servicos_ok}</td>
+                          <td>{moneyBr(t.valor)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={3}>TOTAL Neutra</td>
+                      <td>
+                        {(data?.ok_tci_tecnicos || []).reduce(
+                          (s, t) => s + t.servicos_ok,
+                          0,
+                        )}
+                      </td>
+                      <td>
+                        {moneyBr(
+                          (data?.ok_tci_tecnicos || []).reduce(
+                            (s, t) => s + t.valor,
+                            0,
+                          ),
+                        )}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </section>
+          ) : null}
 
           {showDes ? (
             <section className="painel-block">
