@@ -99,7 +99,10 @@ export const TECH_LABELS: Record<string, string> = {
 
 /** Salário CLT provisório (único configurável) — OPEX 17/11. */
 export const CLT_SALARIO_PROVISORIO = 3245.67;
-/** PJ Neutra/IAT — R$/atividade produtiva. */
+/**
+ * PJ R$ / unidade produtiva (único configurável).
+ * Neutra = atividade produtiva (SA OK); IAT = OS produtiva (baixa 409), não por tarefa.
+ */
 export const PJ_RATE_ATIVIDADE = 90;
 
 export const MONTH_KEYS = [

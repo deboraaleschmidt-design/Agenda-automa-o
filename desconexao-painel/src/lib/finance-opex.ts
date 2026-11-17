@@ -233,7 +233,7 @@ export function buildIatQuinzena(
         valor: clt ? null : moneyRound(a1 * PJ_RATE_ATIVIDADE),
         nota: clt
           ? `CLT · R$ ${CLT_SALARIO_PROVISORIO.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês`
-          : `PJ · R$ ${PJ_RATE_ATIVIDADE}/atividade`,
+          : `PJ · R$ ${PJ_RATE_ATIVIDADE}/OS produtiva (409)`,
       });
     }
     if (a2 > 0) {
@@ -244,7 +244,7 @@ export function buildIatQuinzena(
         valor: clt ? null : moneyRound(a2 * PJ_RATE_ATIVIDADE),
         nota: clt
           ? `CLT · R$ ${CLT_SALARIO_PROVISORIO.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês`
-          : `PJ · R$ ${PJ_RATE_ATIVIDADE}/atividade`,
+          : `PJ · R$ ${PJ_RATE_ATIVIDADE}/OS produtiva (409)`,
       });
     }
   }
@@ -360,7 +360,9 @@ function buildOpex(
         linhas.push({
           tecnico: l.tecnico,
           categoria: "PJ",
-          detalhe: `${q.titulo} · ${l.atividades} at. × R$ ${PJ_RATE_ATIVIDADE}`,
+          detalhe: `${q.titulo} · ${l.atividades} × R$ ${PJ_RATE_ATIVIDADE}${
+            (l.nota || "").includes("OS produtiva") ? "/OS" : ""
+          }`,
           valor: l.valor,
         });
       } else if (l.tipo === "parceiro" && l.valor != null) {

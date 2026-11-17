@@ -18,12 +18,12 @@ import {
 } from "./iat-base-engine";
 import { parseEquipe } from "./iat-parse";
 import {
-  matchLpuIat,
   menorPrecoDesconexao,
   parseLpuDesconexao,
   parseLpuIat,
   parseLpuTelemont1,
   precoDesconexaoPorServico,
+  priceIatOsList,
   type LpuItem,
 } from "./lpu-parse";
 import {
@@ -47,6 +47,7 @@ import {
 import { mapRespostasHeader, normalizeServico } from "./servico";
 import { sheetsAuthOrNull } from "./sheets-client";
 import {
+  PJ_RATE_ATIVIDADE,
   SPREADSHEET_D1_ID,
   SPREADSHEET_ID,
   SPREADSHEET_LPU_ID,
@@ -291,17 +292,23 @@ function buildIatAtividades(
       sem: boolean;
     }
   >();
+  const semMotivo = new Map<string, number>();
   let semMatch = 0;
-  let ambig = 0;
+  let garbageOs = 0;
 
   for (const r of Object.values(ultimo)) {
-    const oss = r.osRaw.length ? r.osRaw : [];
-    if (!oss.length) {
+    const priced = priceIatOsList(r.osRaw, r.comp, lpu);
+    const rawReal = r.osRaw.filter((os) => /^\s*\d+\s*[-–—]/.test(String(os)));
+    garbageOs += Math.max(0, r.osRaw.filter(Boolean).length - rawReal.length);
+
+    if (!priced.length) {
       semMatch += 1;
+      const motivo = "Sem Tipo O.S válido na BASE";
+      semMotivo.set(motivo, (semMotivo.get(motivo) || 0) + 1);
       const key = "sem-os|Sem Tipo O.S|x";
       const cur = buckets.get(key) || {
         codigo: "—",
-        descricao: "Sem Tipo O.S na BASE",
+        descricao: motivo,
         qtd: 0,
         preco: null,
         sem: true,
@@ -310,35 +317,22 @@ function buildIatAtividades(
       buckets.set(key, cur);
       continue;
     }
-    for (const os of oss) {
-      const { item, ambiguous } = matchLpuIat(os, lpu, r.comp);
-      if (ambiguous) ambig += 1;
-      if (!item) {
+
+    for (const line of priced) {
+      if (line.sem_preco) {
         semMatch += 1;
-        const m = String(os).match(/^\s*([\d.,]+)\s*[-–—]?\s*(.*)$/);
-        const codigo = (m?.[1] || "—").trim();
-        const desc = ((m?.[2] || os).trim() || os) + (ambiguous ? " (ambíguo LPU)" : "");
-        const key = `${codigo}|${desc}|x`;
-        const cur = buckets.get(key) || {
-          codigo,
-          descricao: desc,
-          qtd: 0,
-          preco: null,
-          sem: true,
-        };
-        cur.qtd += 1;
-        buckets.set(key, cur);
-        continue;
+        const motivo = line.motivo_sem || `TOA ${line.toaCode} sem preço`;
+        semMotivo.set(motivo, (semMotivo.get(motivo) || 0) + 1);
       }
-      const sem = item.preco == null;
-      if (sem) semMatch += 1;
-      const key = `${item.codigo}|${item.descricao}|${item.preco ?? "x"}`;
+      const key = `${line.codigo}|${line.descricao}|${line.preco ?? "x"}|${line.sem_preco ? 1 : 0}`;
       const cur = buckets.get(key) || {
-        codigo: item.codigo,
-        descricao: item.descricao,
+        codigo: line.codigo,
+        descricao: line.sem_preco
+          ? `${line.descricao}${line.motivo_sem ? ` · ${line.motivo_sem}` : ""}`
+          : line.descricao,
         qtd: 0,
-        preco: item.preco,
-        sem,
+        preco: line.preco,
+        sem: line.sem_preco,
       };
       cur.qtd += 1;
       buckets.set(key, cur);
@@ -346,13 +340,18 @@ function buildIatAtividades(
   }
 
   if (semMatch) {
+    const top = [...semMotivo.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([m, n]) => `${n}× ${m}`)
+      .join("; ");
     avisos.push(
-      `IAT: ${semMatch} serviço(s) sem preço LPU casado (exibidos como «sem preço»).`,
+      `IAT: ${semMatch} serviço(s) sem preço LPU. Motivos: ${top}.`,
     );
   }
-  if (ambig) {
+  if (garbageOs) {
     avisos.push(
-      `IAT: ${ambig} casamento(s) LPU ambíguo(s) → «sem preço» (não assumido).`,
+      `IAT: ${garbageOs} célula(s) Tipo O.S ignorada(s) (não no formato «código - descrição»).`,
     );
   }
 
@@ -363,9 +362,13 @@ function buildIatAtividades(
       descricao: b.descricao,
       quantidade: b.qtd,
       preco_unitario: b.preco,
-      valor: b.sem || b.preco == null ? null : Math.round(b.qtd * b.preco * 100) / 100,
+      valor:
+        b.sem || b.preco == null
+          ? null
+          : Math.round(b.qtd * b.preco * 100) / 100,
       sem_preco: b.sem,
-      origem_lpu: "LPU · IAT (casamento por descrição Tipo O.S)",
+      origem_lpu:
+        "LPU · IAT (TOA→LPU · 1ª tarefa deslocamento · casa/apto no complemento)",
     }))
     .sort((a, b) => b.quantidade - a.quantidade);
 
@@ -814,7 +817,7 @@ export async function syncFinanceiro(opts?: {
       a_pagar: showDes ? pagar.linhas : [],
       total_a_pagar: showDes ? pagar.total : 0,
       a_pagar_iat_nota:
-        "IAT: pagamento PJ R$90/atividade · CLT salário provisório (prévia OPEX).",
+        `IAT: pagamento PJ R$${PJ_RATE_ATIVIDADE}/OS produtiva (baixa 409) · improdutiva sem pagamento · CLT salário provisório (prévia OPEX).`,
       faturamento_meses: fatFiltrado.length ? fatFiltrado : fat.meses,
       faturamento_ago_mais: fat.agoMais,
       pagamento_quinzenas: opexPack.quinzenas,

@@ -260,7 +260,13 @@ function FinanceiroInner() {
               <div className="kpi-hint">
                 PJ + CLT + parceiro
                 {opex
-                  ? ` · PJ R$ ${opex.rate_pj}/at. · CLT R$ ${opex.salario_clt.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                  ? ` · PJ R$ ${opex.rate_pj}${
+                      segmento === "iat"
+                        ? "/OS"
+                        : segmento === "neutra"
+                          ? "/at."
+                          : "/unid."
+                    } · CLT R$ ${opex.salario_clt.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
                   : ""}
               </div>
             </article>
@@ -431,7 +437,11 @@ function FinanceiroInner() {
                     <div className="kpi-label">Custo PJ</div>
                     <div className="kpi-value">{moneyBr(opex.custo_pj)}</div>
                     <div className="kpi-hint">
-                      R$ {opex.rate_pj}/atividade produtiva
+                      {segmento === "iat"
+                        ? `R$ ${opex.rate_pj}/OS produtiva (409)`
+                        : segmento === "neutra"
+                          ? `R$ ${opex.rate_pj}/atividade produtiva`
+                          : `R$ ${opex.rate_pj}/unid. produtiva`}
                     </div>
                   </article>
                   <article className="kpi">
