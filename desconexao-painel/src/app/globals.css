@@ -1514,10 +1514,8 @@ table.data.cidade-mes td:first-child {
 }
 
 .kpi-improd .kpi-label,
-.kpi-improd .kpi-hint {
-  color: rgba(255, 255, 255, 0.85);
-}
-
+.kpi-improd .kpi-hint,
 .kpi-improd .kpi-value {
   color: #fff;
+  opacity: 1;
 }
