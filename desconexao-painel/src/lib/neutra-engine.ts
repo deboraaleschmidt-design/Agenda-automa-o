@@ -425,13 +425,14 @@ function isBrNationalHoliday(y: number, m: number, d: number): boolean {
   return gf.getUTCMonth() + 1 === m && gf.getUTCDate() === d;
 }
 
+/** Dia útil pagamento Neutra: sábado conta; só domingo e feriado nacional empurram. */
 function isBusinessDay(y: number, m: number, d: number): boolean {
   const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-  if (wd === 0 || wd === 6) return false;
+  if (wd === 0) return false; // domingo
   return !isBrNationalHoliday(y, m, d);
 }
 
-/** Dia alvo ou 1º dia útil após (seg–sex, feriados nacionais BR). */
+/** Dia alvo ou 1º dia útil após (sábado conta; domingo/feriado empurram). */
 export function firstBusinessOnOrAfter(
   y: number,
   m: number,
@@ -478,7 +479,7 @@ export function pagamentoQuinzenaMes(
     q2_pago_em: q2.br,
     q2_pago_em_iso: q2.key,
     regra:
-      "Pagamento só PJ (TIPO EQUIPE). 1ª → dia 20 (ou 1º útil após); 2ª → dia 5 do mês seguinte (ou 1º útil após). CLT fixos sem data de quinzena.",
+      "Pagamento só PJ (TIPO EQUIPE). 1ª → dia 20 (ou 1º dia útil após); 2ª → dia 5 do mês seguinte (ou 1º dia útil após). Dia útil = seg–sáb (sábado conta); só domingo e feriado nacional empurram. CLT fixos sem data de quinzena.",
   };
 }
 

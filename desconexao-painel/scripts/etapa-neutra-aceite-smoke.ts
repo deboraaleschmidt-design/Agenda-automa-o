@@ -112,15 +112,15 @@ async function main() {
     console.log(
       `QUINZENAS Nov: 1ª=${vd.total.q1} 2ª=${vd.total.q2} · pag PJ ${vd.pagamento.q1_pago_em} / ${vd.pagamento.q2_pago_em}`,
     );
-    // 20/11/2026 = feriado Consciência Negra → 1º útil = 23/11 (seg)
+    // 20/11/2026 = feriado Consciência Negra → 1º útil = 21/11 (sáb conta)
     assert(
-      vd.pagamento.q1_pago_em === "23/11/2026",
-      `pag 1ª=23/11/2026 got ${vd.pagamento.q1_pago_em}`,
+      vd.pagamento.q1_pago_em === "21/11/2026",
+      `pag 1ª=21/11/2026 got ${vd.pagamento.q1_pago_em}`,
     );
-    // 05/12/2026 = sábado → 07/12/2026
+    // 05/12/2026 = sábado → conta como dia útil
     assert(
-      vd.pagamento.q2_pago_em === "07/12/2026",
-      `pag 2ª=07/12/2026 got ${vd.pagamento.q2_pago_em}`,
+      vd.pagamento.q2_pago_em === "05/12/2026",
+      `pag 2ª=05/12/2026 got ${vd.pagamento.q2_pago_em}`,
     );
     const clts = vd.rows.filter((r) => !r.is_pj);
     assert(
