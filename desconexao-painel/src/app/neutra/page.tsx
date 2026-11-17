@@ -275,7 +275,7 @@ function NeutraInner() {
                   <thead>
                     <tr>
                       <th className="neutra-dia-sticky">Técnico</th>
-                      <th>Tipo</th>
+                      <th className="neutra-dia-tipo-col">Tipo</th>
                       {data.visao_dia.cols.map((c) => (
                         <th
                           key={c.key}
@@ -306,10 +306,12 @@ function NeutraInner() {
                           ) : null}
                         </th>
                       ))}
-                      <th>Total 1ª</th>
-                      <th>Total 2ª</th>
-                      <th>Total prod.</th>
-                      <th>Improd.</th>
+                      <th className="neutra-dia-sum">Total 1ª</th>
+                      <th className="neutra-dia-sum">Total 2ª</th>
+                      <th className="neutra-dia-sum">Total produtivas</th>
+                      <th className="neutra-dia-sum neutra-dia-improd-h">
+                        Total improdutivas
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -325,8 +327,15 @@ function NeutraInner() {
                       <>
                         {data.visao_dia.rows.map((row: NeutraVisaoDiaRow) => (
                           <tr key={row.tt || row.nome}>
-                            <td className="neutra-dia-sticky">{row.nome}</td>
-                            <td>
+                            <td
+                              className="neutra-dia-sticky"
+                              title={row.nome}
+                            >
+                              <span className="neutra-dia-nome">
+                                {row.nome}
+                              </span>
+                            </td>
+                            <td className="neutra-dia-tipo-col">
                               <span
                                 className={
                                   row.is_pj
@@ -352,19 +361,23 @@ function NeutraInner() {
                                 </td>
                               );
                             })}
-                            <td>{row.q1}</td>
-                            <td>{row.q2}</td>
-                            <td>{row.produtivas}</td>
-                            <td className="cell-improd">
+                            <td className="neutra-dia-sum">{row.q1}</td>
+                            <td className="neutra-dia-sum">{row.q2}</td>
+                            <td className="neutra-dia-sum">
+                              {row.produtivas}
+                            </td>
+                            <td className="neutra-dia-sum cell-improd">
                               {row.improdutivas}
                             </td>
                           </tr>
                         ))}
                         <tr className="neutra-dia-total">
                           <td className="neutra-dia-sticky">
-                            {data.visao_dia.total.nome}
+                            <span className="neutra-dia-nome">
+                              {data.visao_dia.total.nome}
+                            </span>
                           </td>
-                          <td />
+                          <td className="neutra-dia-tipo-col" />
                           {data.visao_dia.total.por_dia.map((n, i) => {
                             const col = data.visao_dia!.cols[i];
                             return (
@@ -380,10 +393,16 @@ function NeutraInner() {
                               </td>
                             );
                           })}
-                          <td>{data.visao_dia.total.q1}</td>
-                          <td>{data.visao_dia.total.q2}</td>
-                          <td>{data.visao_dia.total.produtivas}</td>
-                          <td className="cell-improd">
+                          <td className="neutra-dia-sum">
+                            {data.visao_dia.total.q1}
+                          </td>
+                          <td className="neutra-dia-sum">
+                            {data.visao_dia.total.q2}
+                          </td>
+                          <td className="neutra-dia-sum">
+                            {data.visao_dia.total.produtivas}
+                          </td>
+                          <td className="neutra-dia-sum cell-improd">
                             {data.visao_dia.total.improdutivas}
                           </td>
                         </tr>

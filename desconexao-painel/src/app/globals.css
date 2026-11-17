@@ -1562,12 +1562,37 @@ table.data.cidade-mes td:first-child {
   left: 0;
   z-index: 2;
   background: #fff;
-  min-width: 10rem;
-  max-width: 14rem;
+  width: 13.5rem;
+  min-width: 13.5rem;
+  max-width: 13.5rem;
+  overflow: hidden;
   box-shadow: 2px 0 0 var(--line);
 }
 
+.neutra-dia-nome {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 .neutra-dia-table thead th.neutra-dia-sticky {
+  z-index: 3;
+  background: var(--paper-2, #f0f3f5);
+}
+
+.neutra-dia-tipo-col {
+  position: sticky;
+  left: 13.5rem;
+  z-index: 2;
+  background: #fff;
+  min-width: 3.2rem;
+  width: 3.2rem;
+  box-shadow: 2px 0 0 var(--line);
+}
+
+.neutra-dia-table thead th.neutra-dia-tipo-col {
   z-index: 3;
   background: var(--paper-2, #f0f3f5);
 }
@@ -1587,26 +1612,53 @@ table.data.cidade-mes td:first-child {
   letter-spacing: 0.02em;
 }
 
+.neutra-fechamento {
+  min-width: 3.4rem !important;
+  vertical-align: bottom;
+}
+
 .neutra-fechamento-label {
   display: block;
   margin-top: 0.15rem;
   font-size: 0.58rem;
   font-weight: 700;
   letter-spacing: 0.01em;
-  color: var(--accent-deep);
   white-space: normal;
   line-height: 1.15;
-  max-width: 4.2rem;
+  max-width: 3.6rem;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .neutra-fechamento-1a {
-  background: rgba(28, 90, 140, 0.1) !important;
-  box-shadow: inset -2px 0 0 #1c5a8c;
+  background: rgba(28, 90, 140, 0.14) !important;
+  box-shadow: inset -3px 0 0 #1c5a8c;
+}
+
+.neutra-fechamento-1a .neutra-fechamento-label {
+  color: #1c5a8c;
 }
 
 .neutra-fechamento-2a {
-  background: rgba(133, 32, 12, 0.08) !important;
-  box-shadow: inset -2px 0 0 #85200c;
+  background: rgba(133, 32, 12, 0.14) !important;
+  box-shadow: inset -3px 0 0 #85200c;
+}
+
+.neutra-fechamento-2a .neutra-fechamento-label {
+  color: #85200c;
+}
+
+.neutra-dia-sum {
+  min-width: 4.6rem;
+  white-space: normal;
+  line-height: 1.15;
+  font-size: 0.72rem;
+}
+
+.neutra-dia-improd-h,
+.neutra-dia-table .cell-improd {
+  color: #85200c !important;
+  font-weight: 700;
 }
 
 .neutra-dia-total td {
@@ -1614,7 +1666,8 @@ table.data.cidade-mes td:first-child {
   background: #eef2f5;
 }
 
-.neutra-dia-total td.neutra-dia-sticky {
+.neutra-dia-total td.neutra-dia-sticky,
+.neutra-dia-total td.neutra-dia-tipo-col {
   background: #eef2f5;
 }
 
