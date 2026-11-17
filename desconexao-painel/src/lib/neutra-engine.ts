@@ -5,9 +5,13 @@
 import {
   formatTempoMedio,
   type NeutraEquipeRow,
+  type NeutraPagamentoQuinzena,
   type NeutraPayload,
   type NeutraResumo,
   type NeutraTechRow,
+  type NeutraVisaoDia,
+  type NeutraVisaoDiaCol,
+  type NeutraVisaoDiaRow,
 } from "./neutra-parse";
 
 const PRECO_COM_DROP = 150;
@@ -15,6 +19,15 @@ const PRECO_SEM_DROP = 170;
 const PRECO_RETIRADA = 96.23;
 const PRECO_MESH = 49.8;
 const MAX_TEMPO_MIN = 12 * 60;
+
+/** CLTs fixos (pedido) — sem data de pagamento de quinzena. */
+const CLT_FIXOS = new Set([
+  "LUIS GUSTAVO LOPES",
+  "VANIO GONCALVES",
+  "MARCIO ARAUJO DIAS",
+]);
+
+const WEEKDAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 export type NeutraDate = { d: number; m: number; y: number; key: string };
 
@@ -373,6 +386,226 @@ function valorReg(r: NeutraReg): number {
   return Math.round(v * 100) / 100;
 }
 
+function easterSunday(year: number): { m: number; d: number } {
+  // Meeus/Jones/Butcher
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return { m: month, d: day };
+}
+
+function isBrNationalHoliday(y: number, m: number, d: number): boolean {
+  const fixed: Array<[number, number]> = [
+    [1, 1],
+    [4, 21],
+    [5, 1],
+    [9, 7],
+    [10, 12],
+    [11, 2],
+    [11, 15],
+    [11, 20], // Consciência Negra (federal)
+    [12, 25],
+  ];
+  if (fixed.some(([fm, fd]) => fm === m && fd === d)) return true;
+  const easter = easterSunday(y);
+  // Sexta-feira Santa = páscoa − 2
+  const gf = new Date(Date.UTC(y, easter.m - 1, easter.d));
+  gf.setUTCDate(gf.getUTCDate() - 2);
+  return gf.getUTCMonth() + 1 === m && gf.getUTCDate() === d;
+}
+
+function isBusinessDay(y: number, m: number, d: number): boolean {
+  const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  if (wd === 0 || wd === 6) return false;
+  return !isBrNationalHoliday(y, m, d);
+}
+
+/** Dia alvo ou 1º dia útil após (seg–sex, feriados nacionais BR). */
+export function firstBusinessOnOrAfter(
+  y: number,
+  m: number,
+  d: number,
+): { y: number; m: number; d: number; key: string; br: string } {
+  let dt = new Date(Date.UTC(y, m - 1, d));
+  for (let i = 0; i < 14; i++) {
+    const yy = dt.getUTCFullYear();
+    const mm = dt.getUTCMonth() + 1;
+    const dd = dt.getUTCDate();
+    if (isBusinessDay(yy, mm, dd)) {
+      return {
+        y: yy,
+        m: mm,
+        d: dd,
+        key: `${yy}-${pad(mm)}-${pad(dd)}`,
+        br: `${pad(dd)}/${pad(mm)}/${yy}`,
+      };
+    }
+    dt = new Date(Date.UTC(yy, mm - 1, dd + 1));
+  }
+  return {
+    y,
+    m,
+    d,
+    key: `${y}-${pad(m)}-${pad(d)}`,
+    br: `${pad(d)}/${pad(m)}/${y}`,
+  };
+}
+
+export function pagamentoQuinzenaMes(
+  y: number,
+  m: number,
+): NeutraPagamentoQuinzena {
+  const q1 = firstBusinessOnOrAfter(y, m, 20);
+  const nm = m === 12 ? 1 : m + 1;
+  const ny = m === 12 ? y + 1 : y;
+  const q2 = firstBusinessOnOrAfter(ny, nm, 5);
+  return {
+    q1_referencia: `1ª quinzena (1–15/${pad(m)})`,
+    q1_pago_em: q1.br,
+    q1_pago_em_iso: q1.key,
+    q2_referencia: `2ª quinzena (16–fim/${pad(m)})`,
+    q2_pago_em: q2.br,
+    q2_pago_em_iso: q2.key,
+    regra:
+      "Pagamento só PJ (TIPO EQUIPE). 1ª → dia 20 (ou 1º útil após); 2ª → dia 5 do mês seguinte (ou 1º útil após). CLT fixos sem data de quinzena.",
+  };
+}
+
+function isPjTipo(tipo: string, nome: string): boolean {
+  const n = fold(nome);
+  if (CLT_FIXOS.has(n)) return false;
+  const t = fold(tipo);
+  if (t.includes("CLT")) return false;
+  if (t.includes("PJ")) return true;
+  // sem tipo claro e não está na lista CLT → trata como PJ (só PJ recebe data)
+  return !t || t.includes("PRESTADOR") || t.includes("AUTONOMO");
+}
+
+function buildVisaoDia(
+  mesReq: string,
+  regs: NeutraReg[],
+  equipeByTt: Map<string, NeutraEquipeRow>,
+): NeutraVisaoDia | null {
+  if (mesReq.trim().toUpperCase() === "TOTAL") return null;
+  const [ys, ms] = mesReq.trim().split("-");
+  const y = Number(ys);
+  const m = Number(ms);
+  if (!(y > 2000 && m >= 1 && m <= 12)) return null;
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+
+  const cols: NeutraVisaoDiaCol[] = [];
+  for (let d = 1; d <= lastDay; d++) {
+    const js = new Date(Date.UTC(y, m - 1, d));
+    cols.push({
+      dia: d,
+      weekday: WEEKDAYS_PT[js.getUTCDay()],
+      key: `${y}-${pad(m)}-${pad(d)}`,
+      fechamento: d === 15 ? "1a" : d === lastDay ? "2a" : null,
+    });
+  }
+
+  type DayAcc = {
+    nome: string;
+    tt: string;
+    tipo: string;
+    is_pj: boolean;
+    por_dia: number[];
+    improd: number;
+  };
+  const per = new Map<string, DayAcc>();
+
+  const ensure = (tt: string, nome: string, areaIgnored: string): DayAcc => {
+    void areaIgnored;
+    let cur = per.get(tt);
+    if (cur) return cur;
+    const eq = equipeByTt.get(tt);
+    const tipo = eq?.tipo || "";
+    const nomeEq = eq?.nome || nome;
+    cur = {
+      nome: nomeEq,
+      tt,
+      tipo,
+      is_pj: isPjTipo(tipo, nomeEq),
+      por_dia: Array.from({ length: lastDay }, () => 0),
+      improd: 0,
+    };
+    per.set(tt, cur);
+    return cur;
+  };
+
+  for (const r of regs) {
+    if (r.dt.y !== y || r.dt.m !== m) continue;
+    const cur = ensure(r.tt, r.nome, r.area);
+    if (r.estado === "produtiva") {
+      if (r.dt.d >= 1 && r.dt.d <= lastDay) cur.por_dia[r.dt.d - 1] += 1;
+    } else {
+      cur.improd += 1;
+    }
+  }
+
+  const toRow = (a: DayAcc): NeutraVisaoDiaRow => {
+    const q1 = a.por_dia.slice(0, 15).reduce((s, n) => s + n, 0);
+    const q2 = a.por_dia.slice(15).reduce((s, n) => s + n, 0);
+    const produtivas = q1 + q2;
+    return {
+      nome: a.nome,
+      tt: a.tt,
+      tipo: a.tipo,
+      is_pj: a.is_pj,
+      por_dia: a.por_dia,
+      q1,
+      q2,
+      produtivas,
+      improdutivas: a.improd,
+    };
+  };
+
+  const rows = [...per.values()]
+    .map(toRow)
+    .filter((r) => r.produtivas + r.improdutivas > 0)
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+  const totPorDia = Array.from({ length: lastDay }, () => 0);
+  let totImp = 0;
+  for (const r of rows) {
+    for (let i = 0; i < lastDay; i++) totPorDia[i] += r.por_dia[i];
+    totImp += r.improdutivas;
+  }
+  const totQ1 = totPorDia.slice(0, 15).reduce((s, n) => s + n, 0);
+  const totQ2 = totPorDia.slice(15).reduce((s, n) => s + n, 0);
+
+  const total: NeutraVisaoDiaRow = {
+    nome: "TOTAL",
+    tt: "",
+    tipo: "",
+    is_pj: false,
+    por_dia: totPorDia,
+    q1: totQ1,
+    q2: totQ2,
+    produtivas: totQ1 + totQ2,
+    improdutivas: totImp,
+  };
+
+  return {
+    mes: mesReq,
+    cols,
+    rows,
+    total,
+    pagamento: pagamentoQuinzenaMes(y, m),
+  };
+}
+
 export function buildNeutraFromBase(opts: {
   baseRows: unknown[][];
   equipeRows: unknown[][];
@@ -521,6 +754,12 @@ export function buildNeutraFromBase(opts: {
           return `${pad(Number(m))}/${y}`;
         })();
 
+  const equipeByTt = new Map<string, NeutraEquipeRow>();
+  for (const e of equipe) {
+    if (e.tt) equipeByTt.set(fold(e.tt), e);
+  }
+  const visao_dia = buildVisaoDia(mesReq, regs, equipeByTt);
+
   return {
     atualizado_em: new Date().toISOString(),
     fonte: "sheets",
@@ -532,6 +771,7 @@ export function buildNeutraFromBase(opts: {
     mes: mesReq.toUpperCase() === "TOTAL" ? "TOTAL" : mesReq,
     resumo,
     tecnicos,
+    visao_dia,
     avisos,
     equipe,
   };

@@ -1519,3 +1519,122 @@ table.data.cidade-mes td:first-child {
   color: #fff;
   opacity: 1;
 }
+
+/* Neutra — visão por dia / quinzenas */
+.neutra-pay-legend {
+  margin: 0 0 0.85rem;
+  padding: 0.75rem 0.95rem;
+  background: #f4f7f9;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--steel);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.neutra-pay-legend p {
+  margin: 0;
+}
+
+.neutra-pay-rule {
+  margin-top: 0.35rem !important;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.neutra-dia-wrap {
+  max-height: min(70vh, 42rem);
+  overflow: auto;
+}
+
+.neutra-dia-table th,
+.neutra-dia-table td {
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.1rem;
+  padding: 0.35rem 0.28rem;
+}
+
+.neutra-dia-table th.neutra-dia-sticky,
+.neutra-dia-table td.neutra-dia-sticky {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
+  min-width: 10rem;
+  max-width: 14rem;
+  box-shadow: 2px 0 0 var(--line);
+}
+
+.neutra-dia-table thead th.neutra-dia-sticky {
+  z-index: 3;
+  background: var(--paper-2, #f0f3f5);
+}
+
+.neutra-dia-num {
+  display: block;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.neutra-dia-wd {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.neutra-fechamento-label {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--accent-deep);
+  white-space: normal;
+  line-height: 1.15;
+  max-width: 4.2rem;
+}
+
+.neutra-fechamento-1a {
+  background: rgba(28, 90, 140, 0.1) !important;
+  box-shadow: inset -2px 0 0 #1c5a8c;
+}
+
+.neutra-fechamento-2a {
+  background: rgba(133, 32, 12, 0.08) !important;
+  box-shadow: inset -2px 0 0 #85200c;
+}
+
+.neutra-dia-total td {
+  font-weight: 700;
+  background: #eef2f5;
+}
+
+.neutra-dia-total td.neutra-dia-sticky {
+  background: #eef2f5;
+}
+
+.neutra-tipo {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.35rem;
+  border: 1px solid var(--line);
+}
+
+.neutra-tipo-pj {
+  color: #0f3d2e;
+  background: #e4f3ec;
+  border-color: #b7dcc9;
+}
+
+.neutra-tipo-clt {
+  color: #4a3b12;
+  background: #f5efd8;
+  border-color: #e0d4a8;
+}
