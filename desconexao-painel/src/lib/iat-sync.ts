@@ -21,27 +21,21 @@ export async function syncIat(mes = "TOTAL"): Promise<IatPayload> {
   try {
     const res = await auth.sheets.spreadsheets.values.batchGet({
       spreadsheetId: SPREADSHEET_D1_ID,
-<<<<<<< HEAD
       ranges: [
         // DP:EB = colunas novas SET (18/11); EB cobre o bloco.
         "'BASE IAT'!A1:EB",
+        // PROMPT IAT (#13) + BASE, sem duplicar no motor.
+        "'PROMPT IAT'!A1:EB",
         "EQUIPE!A1:F40",
         "'PAINEL OK'!A1:J200",
       ],
-=======
-      ranges: ["'BASE IAT'!A1:DO", "'PROMPT IAT'!A1:DO", "EQUIPE!A1:F40"],
->>>>>>> origin/main
       valueRenderOption: "FORMATTED_VALUE",
     });
     const ranges = res.data.valueRanges || [];
     const baseRows = ranges[0]?.values || [];
-<<<<<<< HEAD
-    const eqRows = ranges[1]?.values || [];
-    const painelOkRows = ranges[2]?.values || [];
-=======
     const promptRows = ranges[1]?.values || [];
     const eqRows = ranges[2]?.values || [];
->>>>>>> origin/main
+    const painelOkRows = ranges[3]?.values || [];
     const built = buildIatFromBase({
       baseRows,
       promptRows,
