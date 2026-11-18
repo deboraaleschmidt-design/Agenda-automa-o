@@ -84,6 +84,7 @@ export const SPREADSHEET_D1_ID =
 export const SPREADSHEET_NEUTRA_ID =
   process.env.GOOGLE_SHEETS_NEUTRA_ID?.trim() ||
   process.env.GOOGLE_SHEETS_D1_ID?.trim() ||
+  SPREADSHEET_D1_ID ||
   "";
 /** LPU GERAL TCI — preços oficiais (só leitura). */
 export const SPREADSHEET_LPU_ID =

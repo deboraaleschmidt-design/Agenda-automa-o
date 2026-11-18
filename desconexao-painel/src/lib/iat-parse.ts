@@ -143,7 +143,7 @@ export type IatPayload = {
   dados_ate: string | null;
   /** Rótulo dd/mm para o topo. */
   dados_ate_br: string | null;
-  /** Meses YYYY-MM disponíveis na BASE (≥ 01/10/2026). */
+  /** Meses YYYY-MM disponíveis na BASE (≥ 22/09/2026). */
   meses_disponiveis: string[];
   mes: string;
   mes_aba: string | null;
@@ -402,6 +402,18 @@ export function parseIatSheet(rows: unknown[][]): {
   return { titulo, mes_aba, blocos, resumo, ranking };
 }
 
+/** Debora 18/11: Gabriel Oliveira de Oliveira = PJ (custo PJ), mesmo se EQUIPE divergir. */
+export function forceGabrielPj(tipo: string, nome: string): string {
+  const n = nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  if (n.includes("GABRIEL") && n.includes("OLIVEIRA")) return "PJ";
+  return tipo;
+}
+
 export function parseEquipe(rows: unknown[][]): EquipeRow[] {
   const out: EquipeRow[] = [];
   let header = -1;
@@ -417,10 +429,11 @@ export function parseEquipe(rows: unknown[][]): EquipeRow[] {
     if (!login) break;
     if (login.toUpperCase().includes("CLASSIFICAR")) break;
     if (login.toUpperCase() === "LOGIN") break;
+    const nome = cell(rows[i], 2);
     out.push({
       login,
-      tipo: cell(rows[i], 1),
-      nome: cell(rows[i], 2),
+      tipo: forceGabrielPj(cell(rows[i], 1), nome),
+      nome,
       base: cell(rows[i], 3),
       setor: cell(rows[i], 4),
       situacao: cell(rows[i], 5),
@@ -429,6 +442,46 @@ export function parseEquipe(rows: unknown[][]): EquipeRow[] {
   return out;
 }
 
+function tripleFromRow(row: unknown[]): PainelOkTriple {
+  return { canoas: num(row[2]), poa: num(row[3]), total: num(row[4]) };
+}
+
+function parseCodeTable(
+  rows: unknown[][],
+  start: number,
+  withPendencia: boolean,
+): { rows: PainelOkCodeRow[]; next: number } {
+  const out: PainelOkCodeRow[] = [];
+  let i = start;
+  while (i < rows.length) {
+    const codigo = cell(rows[i], 0);
+    const u = codigo.toUpperCase();
+    if (!codigo) {
+      i += 1;
+      if (out.length) break;
+      continue;
+    }
+    if (u === "CÓDIGO" || u === "CODIGO") {
+      i += 1;
+      continue;
+    }
+    if (u.startsWith("TOTAL") || u.startsWith(",") || !/^\d/.test(codigo)) break;
+    if (!/^\d+$/.test(codigo)) break;
+    const row = rows[i] || [];
+    out.push({
+      codigo,
+      descricao: cell(row, 1),
+      canoas: num(row[2]),
+      poa: num(row[3]),
+      total: num(row[4]),
+      tipo_pendencia: withPendencia ? cell(row, 5) || undefined : undefined,
+    });
+    i += 1;
+  }
+  return { rows: out, next: i };
+}
+
+/** Lê a aba PAINEL OK (valores fixos na planilha — sem recalcular). */
 export function parsePainelOk(rows: unknown[][]): {
   resumo: PainelOkResumo | null;
   tecnicos: PainelOkTech[];
@@ -439,43 +492,89 @@ export function parsePainelOk(rows: unknown[][]): {
   let pct_painel = { canoas: 0, poa: 0, total: 0 };
   let adesao_ok = 0;
   let migracao_ok = 0;
+  let improdutivas_adesao = { canoas: 0, poa: 0, total: 0 };
+  let improdutivas_migracao = { canoas: 0, poa: 0, total: 0 };
   let ofensor = "";
+  let ofensor_canoas = "";
+  let ofensor_poa = "";
+  const z = { canoas: 0, poa: 0, total: 0 };
+  const casa_predio: PainelOkCasaPredio = {
+    ok_casa: { ...z },
+    ok_predio: { ...z },
+    ok_ni: { ...z },
+    imp_casa: { ...z },
+    imp_predio: { ...z },
+    imp_ni: { ...z },
+  };
 
   for (let i = 0; i < rows.length; i++) {
     const label = cell(rows[i], 1) || cell(rows[i], 0);
-    const u = label.toUpperCase();
+    const u = label
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
     const row = rows[i] || [];
-    // Layout: col B indicator, C Canoas, D POA, E TOTAL
-    const c = num(row[2]);
-    const d = num(row[3]);
-    const e = num(row[4]);
-    if (u.startsWith("CONTRATOS OK (PRODUTIVAS)")) {
-      contratos_ok = { canoas: c, poa: d, total: e };
-    } else if (u.startsWith("IMPRODUTIVAS (CONTRATOS)")) {
-      improdutivas = { canoas: c, poa: d, total: e };
-    } else if (u.includes("% PAINEL")) {
+    const t = tripleFromRow(row);
+    if (u.startsWith("CONTRATOS OK (PRODUTIVAS)")) contratos_ok = t;
+    else if (u.startsWith("IMPRODUTIVAS (CONTRATOS)")) improdutivas = t;
+    else if (u.includes("CONTRATOS OK") && u.includes("CASA"))
+      casa_predio.ok_casa = t;
+    else if (u.includes("CONTRATOS OK") && (u.includes("PREDIO") || u.includes("PRÉDIO")))
+      casa_predio.ok_predio = t;
+    else if (u.includes("CONTRATOS OK") && (u.includes("NAO INFORM") || u.includes("OUTRO")))
+      casa_predio.ok_ni = t;
+    else if (u.includes("IMPRODUTIVAS") && u.includes("CASA"))
+      casa_predio.imp_casa = t;
+    else if (u.includes("IMPRODUTIVAS") && (u.includes("PREDIO") || u.includes("PRÉDIO")))
+      casa_predio.imp_predio = t;
+    else if (u.includes("IMPRODUTIVAS") && (u.includes("NAO INFORM") || u.includes("OUTRO")))
+      casa_predio.imp_ni = t;
+    else if (u.includes("% PAINEL") || u.startsWith("% PAINEL")) {
       pct_painel = {
         canoas: pctFromCell(row[2]),
         poa: pctFromCell(row[3]),
         total: pctFromCell(row[4]),
       };
-    } else if (u.startsWith("TAREFAS DE ADESÃO") && u.includes("OK")) {
-      adesao_ok = e || c + d;
-    } else if (u.startsWith("TAREFAS DE MIGRAÇÃO") && u.includes("OK")) {
-      migracao_ok = e || c + d;
+    } else if (u.startsWith("TAREFAS DE ADESAO") && u.includes("OK")) {
+      adesao_ok = t.total || t.canoas + t.poa;
+    } else if (u.startsWith("TAREFAS DE MIGRACAO") && u.includes("OK")) {
+      migracao_ok = t.total || t.canoas + t.poa;
+    } else if (u.startsWith("IMPRODUTIVAS COM ADESAO")) {
+      improdutivas_adesao = t;
+    } else if (u.startsWith("IMPRODUTIVAS COM MIGRACAO")) {
+      improdutivas_migracao = t;
     } else if (u.startsWith("OFENSOR GERAL")) {
       ofensor = cell(row, 4) || cell(row, 2);
+      ofensor_canoas = cell(row, 2);
+      ofensor_poa = cell(row, 3);
+    }
+  }
+
+  let adesao_codigos: PainelOkCodeRow[] = [];
+  let migracao_codigos: PainelOkCodeRow[] = [];
+  let adesao_improd_codigos: PainelOkCodeRow[] = [];
+  let migracao_improd_codigos: PainelOkCodeRow[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const t = rowText(rows[i]);
+    if (t.includes("2. ADES") && t.includes("TAREFAS")) {
+      const parsed = parseCodeTable(rows, i + 1, false);
+      adesao_codigos = parsed.rows;
+    } else if (t.includes("IMPRODUTIVAS DA ADES")) {
+      const parsed = parseCodeTable(rows, i + 1, true);
+      adesao_improd_codigos = parsed.rows;
+    } else if (t.includes("3. MIGRA") && t.includes("TAREFAS")) {
+      const parsed = parseCodeTable(rows, i + 1, false);
+      migracao_codigos = parsed.rows;
+    } else if (t.includes("IMPRODUTIVAS DA MIGRA")) {
+      const parsed = parseCodeTable(rows, i + 1, true);
+      migracao_improd_codigos = parsed.rows;
     }
   }
 
   const tecnicos: PainelOkTech[] = [];
   let currentBase = "";
   for (let i = 0; i < rows.length; i++) {
-    const t = rowText(rows[i]);
-    if (t.includes("RESUMO POR TÉCNICO")) continue;
-    if (upper(rows[i], 1) === "CANOAS" || (cell(rows[i], 1) === "" && upper(rows[i], 0) === "")) {
-      /* skip */
-    }
     if (cell(rows[i], 1).toUpperCase() === "CANOAS" || cell(rows[i], 0).toUpperCase() === "CANOAS") {
       currentBase = "CANOAS";
       continue;
@@ -491,12 +590,13 @@ export function parsePainelOk(rows: unknown[][]): {
     if (!/^\d/.test(pos) && !pos.includes("º")) continue;
     if (!currentBase) continue;
     const row = rows[i] || [];
+    const nome = cell(row, 1);
     tecnicos.push({
       base: currentBase,
       pos,
-      tecnico: cell(row, 1),
+      tecnico: nome,
       login: cell(row, 2),
-      vinculo: cell(row, 3),
+      vinculo: forceGabrielPj(cell(row, 3), nome),
       contratos_ok: num(row[4]),
       improdutivas: num(row[5]),
       pct_painel: pctFromCell(row[6]),
@@ -511,7 +611,6 @@ export function parsePainelOk(rows: unknown[][]): {
     });
   }
 
-  const z = { canoas: 0, poa: 0, total: 0 };
   const resumo: PainelOkResumo | null = contratos_ok.total
     ? {
         contratos_ok,
@@ -519,24 +618,17 @@ export function parsePainelOk(rows: unknown[][]): {
         pct_painel,
         adesao_ok,
         migracao_ok,
-        improdutivas_adesao: { ...z },
-        improdutivas_migracao: { ...z },
+        improdutivas_adesao,
+        improdutivas_migracao,
         ofensor,
-        ofensor_canoas: "",
-        ofensor_poa: "",
+        ofensor_canoas,
+        ofensor_poa,
         periodo_nota,
-        casa_predio: {
-          ok_casa: { ...z },
-          ok_predio: { ...z },
-          ok_ni: { ...z },
-          imp_casa: { ...z },
-          imp_predio: { ...z },
-          imp_ni: { ...z },
-        },
-        adesao_codigos: [],
-        migracao_codigos: [],
-        adesao_improd_codigos: [],
-        migracao_improd_codigos: [],
+        casa_predio,
+        adesao_codigos,
+        migracao_codigos,
+        adesao_improd_codigos,
+        migracao_improd_codigos,
       }
     : null;
 

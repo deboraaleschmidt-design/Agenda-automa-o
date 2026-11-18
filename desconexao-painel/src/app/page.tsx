@@ -17,6 +17,12 @@ export default function HomePage() {
           <Link className="btn btn-ghost" href="/iat">
             IAT
           </Link>
+          <Link className="btn btn-ghost" href="/historico-tecnico">
+            Histórico Técnico
+          </Link>
+          <Link className="btn btn-ghost" href="/retornos">
+            Retornos
+          </Link>
           <Link className="btn btn-ghost" href="/neutra">
             Neutra
           </Link>

@@ -17,9 +17,9 @@ import {
   type RetornoResumo,
 } from "./iat-parse";
 
-/** IAT operacional começa em 01/10/2026 (Debora). */
-const HIST_START = "2026-10-01";
-const PAI_FROM = "2026-10-01";
+/** IAT operacional começa em 22/09/2026 (Debora · SET + OUT + NOV). */
+const HIST_START = "2026-09-22";
+const PAI_FROM = "2026-09-22";
 
 export type IatDate = { d: number; m: number; y: number; key: string };
 
@@ -1136,7 +1136,7 @@ export function buildIatFromBase(opts: {
     : null;
   const mesLabel =
     mesReq === "TOTAL"
-      ? "TOTAL · BASE IAT (desde 01/10)"
+      ? "TOTAL · BASE IAT (desde 22/09)"
       : `BASE IAT · ${mesReq}`;
   const promptNota =
     promptDays.length > 0

@@ -1722,3 +1722,107 @@ table.data.cidade-mes td:first-child {
   background: #f5efd8;
   border-color: #e0d4a8;
 }
+
+/* —— Histórico Técnico (cards) —— */
+.hist-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18.5rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.hist-card {
+  background: linear-gradient(165deg, #eef3f7 0%, #f7fafc 55%, #e8eef4 100%);
+  border: 1px solid var(--sky-pale);
+  border-radius: var(--radius);
+  padding: 0.85rem 0.85rem 0.7rem;
+  box-shadow: var(--shadow-soft);
+}
+
+.hist-card-pj {
+  border-top: 3px solid #2a5f8f;
+}
+
+.hist-card-clt {
+  border-top: 3px solid #5a6d7e;
+}
+
+.hist-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.hist-card-head h2 {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  letter-spacing: 0.02em;
+  color: var(--steel-deep);
+}
+
+.hist-vinculo {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #1e4d73;
+  background: #d7e6f2;
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius);
+}
+
+.hist-card-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.65rem;
+}
+
+.hist-mes {
+  margin-bottom: 0.65rem;
+}
+
+.hist-mes h3 {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #2a5f8f;
+  margin-bottom: 0.35rem;
+}
+
+.hist-subtotal td {
+  font-weight: 700;
+  background: #e4edf5;
+}
+
+.hist-card-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--sky-pale);
+  font-size: 0.85rem;
+  color: var(--steel-deep);
+}
+
+.sem-preco {
+  color: #8a4b12;
+  font-style: italic;
+}
+
+.retornos-ofensor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.85rem;
+  padding: 0 1rem 1rem;
+}
+
+.table-wrap-wide {
+  overflow-x: auto;
+}
+
+@media (max-width: 900px) {
+  .retornos-ofensor-grid {
+    grid-template-columns: 1fr;
+  }
+}

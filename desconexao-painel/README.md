@@ -17,8 +17,23 @@ Abrir http://127.0.0.1:3000/painel e digitar `dev-local-token` (só quando `PAIN
 - `GOOGLE_SERVICE_ACCOUNT_JSON_V2` — service account (leitura; sem fallback para o nome antigo)
 - `GOOGLE_SHEETS_ID` — opcional
 
+## Rotas (hub)
+
+- `/` — segmentos T.ESTRATÉGICO
+- `/painel` — Desconexão
+- `/iat` — IAT (meses SET+OUT+NOV desde 22/09 + TOTAL)
+- `/historico-tecnico` — cards por técnico (aba HISTÓRICO TÉCNICO)
+- `/retornos` — retornos (aba RETORNOS; substitui Retorno Credenciada)
+- `/neutra` — Neutra (PROMPT + BASE, dedupe SA)
+- `/financeiro` — Financeiro
+
 ## Endpoints
 
 - `POST /api/session` — `{ "token": "…" }` → cookie httpOnly
 - `GET /api/painel?mes=YYYY-MM` — cookie ou Bearer
+- `GET /api/iat?mes=YYYY-MM|TOTAL`
+- `GET /api/historico-tecnico`
+- `GET /api/retornos`
+- `GET /api/neutra?mes=YYYY-MM|TOTAL`
+- `GET /api/financeiro?mes=YYYY-MM|TOTAL`
 - `POST /api/sync` — cookie ou Bearer; rate limit 3 / 5 min por IP

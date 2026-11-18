@@ -34,7 +34,7 @@ const MES_NAMES = [
 
 function monthLabel(mes: string): string {
   if (mes.trim().toUpperCase() === "TOTAL")
-    return "TOTAL · BASE IAT (desde 01/10)";
+    return "TOTAL · BASE IAT (desde 22/09)";
   const [y, m] = mes.split("-");
   return `${MES_NAMES[Number(m)] || m} ${y}`;
 }
@@ -62,8 +62,9 @@ function mesBtnLabel(ym: string): string {
 /** Fallback até a API trazer meses_disponiveis da BASE. */
 const MES_FALLBACK: Array<[string, string]> = [
   ["TOTAL", "TOTAL"],
-  ["2026-10", "Out/2026"],
-  ["2026-11", "Nov/2026"],
+  ["2026-09", "SET"],
+  ["2026-10", "OUT"],
+  ["2026-11", "NOV"],
 ];
 
 function IatInner() {
@@ -150,11 +151,6 @@ function IatInner() {
   const okTechs = (data?.painel_ok.tecnicos || []).filter((t) =>
     base === "TOTAL" ? true : t.base === base || (base === "PORTO ALEGRE" && t.base.includes("PORTO")),
   );
-  const ret = data?.retorno.resumo;
-  const ofensores = data?.retorno.ofensores || [];
-  const ofensoresAtendeu = data?.retorno.ofensores_atendeu || [];
-  const motivos = data?.retorno.motivos || [];
-  const detalhes = data?.retorno.detalhes || [];
   const gabriel = (data?.equipe || []).find((e) =>
     e.nome.toUpperCase().includes("GABRIEL"),
   );
@@ -634,161 +630,18 @@ function IatInner() {
 
           <section className="painel-block" aria-labelledby="ret-title">
             <div className="painel-block-head">
-              <h2 id="ret-title">RETORNO CREDENCIADA</h2>
-              <span>ofensor = técnico pai</span>
+              <h2 id="ret-title">Retornos</h2>
+              <span>substitui Retorno Credenciada</span>
             </div>
-            {ret ? (
-              <>
-                <p className="painel-foot" style={{ padding: "0 1rem" }}>
-                  {ret.periodo_nota}
-                </p>
-                <section className="kpi-grid" style={{ padding: "1rem" }}>
-                  <article className="kpi">
-                    <div className="kpi-label">Retornos concluídos</div>
-                    <div className="kpi-value">
-                      {ret.retornos_concluidos.total}
-                    </div>
-                  </article>
-                  <article className="kpi">
-                    <div className="kpi-label">Gerados (pai)</div>
-                    <div className="kpi-value">{ret.retornos_gerados.total}</div>
-                  </article>
-                  <article className="kpi">
-                    <div className="kpi-label">Pai ≠ quem atendeu</div>
-                    <div className="kpi-value">{ret.pai_diferente.total}</div>
-                  </article>
-                  <article className="kpi">
-                    <div className="kpi-label">Pai = quem atendeu</div>
-                    <div className="kpi-value">{ret.pai_igual.total}</div>
-                  </article>
-                </section>
-                {ret.maior_motivo ? (
-                  <p className="ops-note" style={{ margin: "0 1rem 1rem" }}>
-                    Maior motivo: {ret.maior_motivo}
-                  </p>
-                ) : null}
-
-                <div className="painel-block-head" style={{ marginTop: "0.25rem" }}>
-                  <h2>Ranking ofensores</h2>
-                  <span>técnico pai · nome + qtd · maior → menor</span>
-                </div>
-                <div className="table-wrap">
-                  <table className="data compact">
-                    <thead>
-                      <tr>
-                        <th>Pos.</th>
-                        <th>Técnico pai</th>
-                        <th>Retornos</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ofensores.map((o) => (
-                        <tr key={`pai-${o.login}-${o.tecnico}`}>
-                          <td>{o.pos}</td>
-                          <td>{o.tecnico}</td>
-                          <td>{o.retornos}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="painel-block-head" style={{ marginTop: "0.75rem" }}>
-                  <h2>Motivos</h2>
-                  <span>código de baixa · maior → menor</span>
-                </div>
-                <div className="table-wrap">
-                  <table className="data compact">
-                    <thead>
-                      <tr>
-                        <th>Cód.</th>
-                        <th>Motivo</th>
-                        <th>Canoas</th>
-                        <th>POA</th>
-                        <th>Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {motivos.map((m) => (
-                        <tr key={m.codigo}>
-                          <td>{m.codigo}</td>
-                          <td>{m.descricao}</td>
-                          <td>{m.canoas}</td>
-                          <td>{m.poa}</td>
-                          <td>{m.total}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="painel-block-head" style={{ marginTop: "0.75rem" }}>
-                  <h2>Quem atendeu</h2>
-                  <span>ranking secundário · nome + qtd</span>
-                </div>
-                <div className="table-wrap">
-                  <table className="data compact">
-                    <thead>
-                      <tr>
-                        <th>Pos.</th>
-                        <th>Técnico</th>
-                        <th>Retornos</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ofensoresAtendeu.map((o) => (
-                        <tr key={`at-${o.login}`}>
-                          <td>{o.pos}</td>
-                          <td>{o.tecnico}</td>
-                          <td>{o.retornos}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {detalhes.length > 0 ? (
-                  <>
-                    <div className="painel-block-head" style={{ marginTop: "0.75rem" }}>
-                      <h2>Detalhe</h2>
-                      <span>linhas da BASE</span>
-                    </div>
-                    <div className="table-wrap">
-                      <table className="data compact">
-                        <thead>
-                          <tr>
-                            <th>Data</th>
-                            <th>Contrato</th>
-                            <th>Técnico pai</th>
-                            <th>Quem atendeu</th>
-                            <th>Iguais?</th>
-                            <th>Cód.</th>
-                            <th>Descrição</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {detalhes.map((d, i) => (
-                            <tr key={`det-${d.contrato}-${d.data}-${i}`}>
-                              <td>{d.data}</td>
-                              <td>{d.contrato}</td>
-                              <td>{d.tecnico_pai}</td>
-                              <td>{d.quem_atendeu}</td>
-                              <td>{d.iguais}</td>
-                              <td>{d.codigo}</td>
-                              <td>{d.descricao}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <p className="painel-foot" style={{ padding: "1rem" }}>
-                RETORNO sem dados legíveis.
-              </p>
-            )}
+            <p className="painel-foot" style={{ padding: "1rem" }}>
+              Visão completa (COM / SEM HISTÓRICO TCI, ofensores, detalhe) na
+              página dedicada.
+            </p>
+            <p style={{ padding: "0 1rem 1rem" }}>
+              <a className="btn btn-primary btn-sm" href="/retornos">
+                Abrir Retornos →
+              </a>
+            </p>
           </section>
 
           <div className="painel-foot">
