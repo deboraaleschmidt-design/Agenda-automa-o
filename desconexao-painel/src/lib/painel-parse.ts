@@ -610,6 +610,115 @@ export function buildRankingFromGrade(
     .sort((a, b) => b.volume - a.volume);
 }
 
+/** Nome de exibição Desconexão: sem matrícula; não identificado → TCI. */
+export function displayDesconexaoNome(raw: string): string {
+  const s = String(raw || "").trim();
+  if (!s) return "TCI";
+  const u = s
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  if (
+    u.includes("NAO IDENTIFICADO") ||
+    u.includes("OUTROS TCI") ||
+    u === "TCI"
+  ) {
+    return "TCI";
+  }
+  // Title Case a partir do UPPER da planilha; remove códigos tipo Z698465.
+  const semMat = s.replace(/\bZ\d{5,}\b/gi, "").replace(/\s+/g, " ").trim();
+  return semMat
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Ranking a partir da aba DESCONEXÃO (D-1): nomes em A (a partir da linha Técnico),
+ * TOTAL na última coluna numérica. Substitui o “TCI” genérico da grade oficial.
+ */
+export function parseRankingFromDesconexaoD1(
+  rows: unknown[][],
+): { ranking: RankingTecnico[]; mesYm: string | null; titulo: string } {
+  const ranking: RankingTecnico[] = [];
+  let mesYm: string | null = null;
+  let titulo = "";
+  let header = -1;
+  let totCol = -1;
+
+  for (let i = 0; i < rows.length; i++) {
+    const a = cell(rows[i], 0);
+    const t = rowText(rows[i]);
+    if (!titulo && t.includes("PRODUÇÃO") && t.includes("DESCONEX")) {
+      titulo = a;
+      const m = t.match(
+        /(JANEIRO|FEVEREIRO|MARÇO|MARCO|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)\s*(?:PARCIAL\s*)?(\d{4})?/,
+      );
+      if (m) {
+        const names: Record<string, number> = {
+          JANEIRO: 1,
+          FEVEREIRO: 2,
+          MARCO: 3,
+          ABRIL: 4,
+          MAIO: 5,
+          JUNHO: 6,
+          JULHO: 7,
+          AGOSTO: 8,
+          SETEMBRO: 9,
+          OUTUBRO: 10,
+          NOVEMBRO: 11,
+          DEZEMBRO: 12,
+        };
+        const key = m[1]
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toUpperCase();
+        const mi = names[key] || 0;
+        const y = Number(m[2] || "2026");
+        if (mi) mesYm = `${y}-${String(mi).padStart(2, "0")}`;
+      }
+    }
+    if (
+      upper(rows[i], 0) === "TÉCNICO" ||
+      upper(rows[i], 0) === "TECNICO"
+    ) {
+      header = i;
+      const row = rows[i] || [];
+      for (let c = row.length - 1; c >= 1; c--) {
+        if (upper(rows[i], c) === "TOTAL") {
+          totCol = c;
+          break;
+        }
+      }
+      if (totCol < 0) totCol = 32;
+      break;
+    }
+  }
+  if (header < 0) return { ranking, mesYm, titulo };
+
+  for (let i = header + 1; i < rows.length; i++) {
+    const nomeRaw = cell(rows[i], 0);
+    if (!nomeRaw) break;
+    const u = nomeRaw.toUpperCase();
+    if (u.startsWith("TOTAL") || u.includes("IMPRODUTIV")) break;
+    if (u.includes("PRODUÇÃO") || u.includes("PRODUCAO")) break;
+    const vol = num(rows[i]?.[totCol]);
+    if (vol <= 0) continue;
+    ranking.push({
+      nome: displayDesconexaoNome(nomeRaw),
+      codigo: u.includes("GUILHERME")
+        ? "Z698465"
+        : u.includes("ALEXANDRE")
+          ? "Z698466"
+          : u.includes("VALTER")
+            ? "SMA"
+            : "TCI",
+      volume: vol,
+    });
+  }
+  ranking.sort((a, b) => b.volume - a.volume || a.nome.localeCompare(b.nome));
+  return { ranking, mesYm, titulo };
+}
+
 export function aggregateServicos(
   respostas: unknown[][],
   mes: string,

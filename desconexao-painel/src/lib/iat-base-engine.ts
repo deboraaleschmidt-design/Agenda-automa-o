@@ -177,6 +177,25 @@ export function parseBaseIatRegs(rows: unknown[][]): {
   return { regs, dup };
 }
 
+/**
+ * BASE + PROMPT: usa PROMPT só nos dias que ainda não estão na BASE
+ * (sem contar duas vezes). Corrige lacuna tipo 16/11 só no PROMPT.
+ */
+export function mergeBaseAndPromptIat(
+  baseRows: unknown[][],
+  promptRows: unknown[][],
+): { regs: IatReg[]; dup: number; promptDays: string[] } {
+  const base = parseBaseIatRegs(baseRows);
+  const datesInBase = new Set(base.regs.map((r) => r.dt.key));
+  const prompt = parseBaseIatRegs(promptRows);
+  const extra = prompt.regs.filter((r) => !datesInBase.has(r.dt.key));
+  const promptDays = [...new Set(extra.map((r) => r.dt.key))].sort();
+  const regs = [...base.regs, ...extra].sort((a, b) =>
+    a.dt.key < b.dt.key ? -1 : a.dt.key > b.dt.key ? 1 : a.i - b.i,
+  );
+  return { regs, dup: base.dup + prompt.dup, promptDays };
+}
+
 function buildEquipeMap(equipe: EquipeRow[]): EquipeMap {
   const por: EquipeMap = {};
   for (const e of equipe) {
@@ -986,15 +1005,21 @@ export function buildIatFromBase(opts: {
   baseRows: unknown[][];
   equipeRows: unknown[][];
   mes: string;
+  /** PROMPT IAT — dias ausentes na BASE entram daqui. */
+  promptRows?: unknown[][];
   /** Opcional: limitar o fim do recorte (aceite até 08/11). */
   ate?: string;
 }): Omit<IatPayload, "atualizado_em" | "fonte" | "status" | "mensagem"> & {
   dup: number;
   regras_irreprodutiveis: string[];
+  promptDays?: string[];
 } {
   const equipe = parseEquipe(opts.equipeRows);
   const eq = buildEquipeMap(equipe);
-  const { regs, dup } = parseBaseIatRegs(opts.baseRows);
+  const merged = opts.promptRows?.length
+    ? mergeBaseAndPromptIat(opts.baseRows, opts.promptRows)
+    : { ...parseBaseIatRegs(opts.baseRows), promptDays: [] as string[] };
+  const { regs, dup, promptDays } = merged;
   const maxKey =
     regs.reduce((m, r) => (r.dt.key > m ? r.dt.key : m), "") || undefined;
   const meses_disponiveis = listMesesBase(regs);
@@ -1113,9 +1138,13 @@ export function buildIatFromBase(opts: {
     mesReq === "TOTAL"
       ? "TOTAL · BASE IAT (desde 01/10)"
       : `BASE IAT · ${mesReq}`;
+  const promptNota =
+    promptDays.length > 0
+      ? ` · PROMPT dias ${promptDays.map((k) => `${k.slice(8, 10)}/${k.slice(5, 7)}`).join(", ")}`
+      : "";
   const titulo = dados_ate_br
-    ? `PRODUTIVAS E IMPRODUTIVAS — ${mesLabel} · dados até ${dados_ate_br}`
-    : `PRODUTIVAS E IMPRODUTIVAS — ${mesLabel}`;
+    ? `PRODUTIVAS E IMPRODUTIVAS — ${mesLabel} · dados até ${dados_ate_br}${promptNota}`
+    : `PRODUTIVAS E IMPRODUTIVAS — ${mesLabel}${promptNota}`;
 
   return {
     titulo,
@@ -1136,5 +1165,6 @@ export function buildIatFromBase(opts: {
     equipe,
     dup,
     regras_irreprodutiveis: painel.irreprodutiveis,
+    promptDays,
   };
 }

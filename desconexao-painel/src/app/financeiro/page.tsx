@@ -16,6 +16,14 @@ function moneyBr(n: number | null | undefined): string {
   });
 }
 
+function pctBr(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return `${(n * 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}%`;
+}
+
 function mesBtnLabel(ym: string): string {
   const [y, m] = ym.split("-");
   const short = [
@@ -47,6 +55,13 @@ const MES_FALLBACK: Array<[string, string]> = [
   ["2026-09", "Set/2026"],
   ["2026-10", "Out/2026"],
   ["2026-11", "Nov/2026"],
+];
+
+const SETOR_BTNS: Array<[FinanceSegmento, string]> = [
+  ["desconexao", "DESCONEXÃO"],
+  ["iat", "IAT"],
+  ["neutra", "NEUTRA"],
+  ["todos", "TODOS"],
 ];
 
 function FinanceiroInner() {
@@ -131,6 +146,8 @@ function FinanceiroInner() {
   const showDes = segmento === "desconexao" || segmento === "todos";
   const showIat = segmento === "iat" || segmento === "todos";
   const showNeutra = segmento === "neutra" || segmento === "todos";
+  const opex = data?.opex;
+  const quinzenas = data?.pagamento_quinzenas || [];
 
   return (
     <div className="painel-page painel-ops">
@@ -151,32 +168,37 @@ function FinanceiroInner() {
             <span className="empresa">
               <strong>Financeiro</strong>
             </span>
-            <span className="status-pill">LPU</span>
+            <span className="status-pill">LPU · OPEX</span>
             <a className="btn btn-ghost btn-sm" href="/">
               ← Segmentos
             </a>
           </div>
           <div className="painel-controls">
+            <div className="field-month mes-visao-field">
+              <span className="mes-visao-label">Setor</span>
+              <div
+                className="mes-visao"
+                role="group"
+                aria-label="Selecionar setor"
+              >
+                {SETOR_BTNS.map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`mes-visao-btn${segmento === id ? " is-active" : ""}`}
+                    aria-pressed={segmento === id}
+                    onClick={() => setSegmento(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <MesVisaoSelector
               value={mes}
               options={mesOptions}
               onChange={setMes}
             />
-            <label className="field-month">
-              Segmento
-              <select
-                aria-label="Segmento financeiro"
-                value={segmento}
-                onChange={(e) =>
-                  setSegmento(e.target.value as FinanceSegmento)
-                }
-              >
-                <option value="todos">Todos</option>
-                <option value="desconexao">Desconexão</option>
-                <option value="iat">IAT</option>
-                <option value="neutra">Neutra</option>
-              </select>
-            </label>
             <button
               className="btn btn-primary btn-sm"
               type="button"
@@ -192,7 +214,7 @@ function FinanceiroInner() {
         <div className="container">
           <div className="ops-lead reveal">
             <div>
-              <p className="ops-kicker">Faturamento LPU · só leitura</p>
+              <p className="ops-kicker">Faturamento LPU · OPEX · só leitura</p>
               <h1 className="ops-title">{monthLabel(mes)}</h1>
               <p className="ops-sub">
                 {showDes ? data?.lpu_origem.desconexao : null}
@@ -214,7 +236,7 @@ function FinanceiroInner() {
                 {segmento === "todos"
                   ? "Desconexão + IAT + Neutra"
                   : segmento === "iat"
-                    ? "IAT · BASE desde 01/10"
+                    ? "IAT · BASE+PROMPT"
                     : segmento === "neutra"
                       ? "Neutra · BASE INST/MUD"
                       : "Desconexão · Respostas"}
@@ -227,31 +249,263 @@ function FinanceiroInner() {
               </div>
               <div className="kpi-hint">
                 qtd × preço LPU
-                {sub?.sem_preco
-                  ? ` · ${sub.sem_preco} sem preço`
-                  : ""}
+                {sub?.sem_preco ? ` · ${sub.sem_preco} sem preço` : ""}
               </div>
             </article>
             <article className="kpi reveal reveal-delay-2">
-              <div className="kpi-label">A pagar (Desconexão)</div>
+              <div className="kpi-label">Custo OPEX</div>
               <div className="kpi-value">
-                {showDes && data ? moneyBr(data.total_a_pagar) : "—"}
+                {opex ? moneyBr(opex.custo_total) : "—"}
               </div>
               <div className="kpi-hint">
-                {showDes
-                  ? data?.quinzena_titulo || "Quinzena PAINEL RECOLHAS"
-                  : "Só no segmento Desconexão"}
+                PJ + CLT + parceiro
+                {opex
+                  ? ` · PJ R$ ${opex.rate_pj}${
+                      segmento === "iat"
+                        ? "/OS"
+                        : segmento === "neutra"
+                          ? "/at."
+                          : "/unid."
+                    } · CLT R$ ${opex.salario_clt.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                  : ""}
               </div>
             </article>
-            {showIat ? (
-              <article className="kpi reveal reveal-delay-3">
-                <div className="kpi-label">A pagar (IAT)</div>
-                <div className="kpi-value">—</div>
-                <div className="kpi-hint">
-                  {data?.a_pagar_iat_nota || "NÃO INFORMADO"}
+            <article
+              className={`kpi reveal reveal-delay-3 ${
+                opex
+                  ? opex.lucro >= 0
+                    ? "kpi-ok"
+                    : "kpi-loss"
+                  : ""
+              }`}
+            >
+              <div className="kpi-label">
+                {opex && opex.lucro < 0 ? "Prejuízo" : "Lucro"}
+              </div>
+              <div className="kpi-value">
+                {opex ? moneyBr(opex.lucro) : "—"}
+              </div>
+              <div className="kpi-hint">
+                margem {opex ? pctBr(opex.margem) : "—"}
+                {opex?.sem_preco ? ` · ${opex.sem_preco} sem preço` : ""}
+              </div>
+            </article>
+          </section>
+
+          {/* (a) Pagamento por quinzena */}
+          <section className="painel-block" aria-labelledby="quinzena-title">
+            <div className="painel-block-head">
+              <h2 id="quinzena-title">Pagamento técnicos por quinzena</h2>
+              <span>
+                só PJ na data · sábado = útil · CLT sem quinzena
+              </span>
+            </div>
+            <div className="neutra-pay-legend">
+              <p>
+                1ª (1–15) paga dia 20 (ou próximo útil) · 2ª (16–fim) paga dia 5
+                do mês seguinte (ou próximo útil). Domingo/feriado empurram.
+              </p>
+            </div>
+            {quinzenas.length === 0 ? (
+              <p className="painel-foot" style={{ padding: "1rem" }}>
+                Sem quinzenas no período.
+              </p>
+            ) : (
+              quinzenas.map((q) => (
+                <div key={q.id} style={{ marginBottom: "1rem" }}>
+                  <div
+                    className="painel-block-head"
+                    style={{ background: "transparent" }}
+                  >
+                    <h2 style={{ fontSize: "1.05rem" }}>
+                      {q.titulo} · corte {q.corte}
+                    </h2>
+                    <span>pago em {q.pago_em}</span>
+                  </div>
+                  <div className="table-wrap">
+                    <table className="data">
+                      <thead>
+                        <tr>
+                          <th>Técnico</th>
+                          <th>Tipo</th>
+                          <th>Ativ.</th>
+                          <th>Valor</th>
+                          <th>Nota</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {q.linhas.length === 0 ? (
+                          <tr>
+                            <td colSpan={5}>Sem linhas nesta quinzena.</td>
+                          </tr>
+                        ) : (
+                          q.linhas.map((l, i) => (
+                            <tr key={`${q.id}-${l.tecnico}-${i}`}>
+                              <td>{l.tecnico}</td>
+                              <td>{l.tipo}</td>
+                              <td>{l.atividades}</td>
+                              <td>
+                                {l.tipo === "CLT"
+                                  ? "—"
+                                  : moneyBr(l.valor)}
+                              </td>
+                              <td className="sub">{l.nota || ""}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan={3}>TOTAL PJ/parceiro</td>
+                          <td>{moneyBr(q.total)}</td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
-              </article>
-            ) : null}
+              ))
+            )}
+          </section>
+
+          {/* (b) Visão mensal */}
+          <section className="painel-block" aria-labelledby="mensal-title">
+            <div className="painel-block-head">
+              <h2 id="mensal-title">Visão mensal</h2>
+              <span>{data?.visao_mensal.titulo || "total pago no mês"}</span>
+            </div>
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Técnico</th>
+                    <th>Tipo</th>
+                    <th>Valor</th>
+                    <th>Nota</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.visao_mensal.linhas || []).length === 0 ? (
+                    <tr>
+                      <td colSpan={4}>Sem pagamentos no mês.</td>
+                    </tr>
+                  ) : (
+                    (data?.visao_mensal.linhas || []).map((l, i) => (
+                      <tr key={`m-${l.tecnico}-${i}`}>
+                        <td>{l.tecnico}</td>
+                        <td>{l.tipo}</td>
+                        <td>{moneyBr(l.valor)}</td>
+                        <td className="sub">{l.nota || ""}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={2}>TOTAL pago no mês</td>
+                    <td>{moneyBr(data?.visao_mensal.total_pago ?? 0)}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
+
+          {/* (c) OPEX */}
+          <section className="painel-block" aria-labelledby="opex-title">
+            <div className="painel-block-head">
+              <h2 id="opex-title">OPEX · custo × receita LPU</h2>
+              <span>lucro/prejuízo + margem</span>
+            </div>
+            {opex ? (
+              <>
+                <section
+                  className="kpi-grid kpi-grid-ops"
+                  aria-label="OPEX resumo"
+                  style={{ padding: "0.85rem 1rem 0" }}
+                >
+                  <article className="kpi">
+                    <div className="kpi-label">Receita LPU</div>
+                    <div className="kpi-value">{moneyBr(opex.receita)}</div>
+                    <div className="kpi-hint">
+                      {opex.sem_preco
+                        ? `${opex.sem_preco} sem preço`
+                        : "faturar período"}
+                    </div>
+                  </article>
+                  <article className="kpi">
+                    <div className="kpi-label">Custo PJ</div>
+                    <div className="kpi-value">{moneyBr(opex.custo_pj)}</div>
+                    <div className="kpi-hint">
+                      {segmento === "iat"
+                        ? `R$ ${opex.rate_pj}/OS produtiva (409)`
+                        : segmento === "neutra"
+                          ? `R$ ${opex.rate_pj}/atividade produtiva`
+                          : `R$ ${opex.rate_pj}/unid. produtiva`}
+                    </div>
+                  </article>
+                  <article className="kpi">
+                    <div className="kpi-label">Custo CLT + parceiro</div>
+                    <div className="kpi-value">
+                      {moneyBr(opex.custo_clt + opex.custo_parceiro)}
+                    </div>
+                    <div className="kpi-hint">
+                      CLT {moneyBr(opex.custo_clt)} · parceiro{" "}
+                      {moneyBr(opex.custo_parceiro)}
+                    </div>
+                  </article>
+                  <article
+                    className={opex.lucro >= 0 ? "kpi kpi-ok" : "kpi kpi-loss"}
+                  >
+                    <div className="kpi-label">
+                      {opex.lucro >= 0 ? "Lucro" : "Prejuízo"}
+                    </div>
+                    <div className="kpi-value">{moneyBr(opex.lucro)}</div>
+                    <div className="kpi-hint">margem {pctBr(opex.margem)}</div>
+                  </article>
+                </section>
+                <div className="table-wrap">
+                  <table className="data">
+                    <thead>
+                      <tr>
+                        <th>Técnico</th>
+                        <th>Categoria</th>
+                        <th>Detalhe</th>
+                        <th>Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {opex.linhas.length === 0 ? (
+                        <tr>
+                          <td colSpan={4}>Sem linhas de custo.</td>
+                        </tr>
+                      ) : (
+                        opex.linhas.map((l, i) => (
+                          <tr key={`ox-${l.tecnico}-${i}`}>
+                            <td>{l.tecnico}</td>
+                            <td>{l.categoria}</td>
+                            <td>{l.detalhe}</td>
+                            <td>
+                              {l.valor == null ? "—" : moneyBr(l.valor)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td colSpan={3}>CUSTO TOTAL</td>
+                        <td>{moneyBr(opex.custo_total)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <p className="painel-foot" style={{ padding: "1rem" }}>
+                OPEX indisponível neste recorte.
+              </p>
+            )}
           </section>
 
           <section className="painel-block" aria-labelledby="fat-lpu-title">
@@ -330,16 +584,6 @@ function FinanceiroInner() {
                 </tfoot>
               </table>
             </div>
-            <p className="painel-foot" style={{ padding: "0.75rem 1rem" }}>
-              Origem:{" "}
-              {[
-                showDes ? data?.lpu_origem.desconexao : null,
-                showIat ? data?.lpu_origem.iat : null,
-                showNeutra ? data?.lpu_origem.neutra : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
           </section>
 
           {showNeutra ? (
@@ -376,25 +620,6 @@ function FinanceiroInner() {
                       ))
                     )}
                   </tbody>
-                  <tfoot>
-                    <tr>
-                      <td colSpan={3}>TOTAL Neutra</td>
-                      <td>
-                        {(data?.ok_tci_tecnicos || []).reduce(
-                          (s, t) => s + t.servicos_ok,
-                          0,
-                        )}
-                      </td>
-                      <td>
-                        {moneyBr(
-                          (data?.ok_tci_tecnicos || []).reduce(
-                            (s, t) => s + t.valor,
-                            0,
-                          ),
-                        )}
-                      </td>
-                    </tr>
-                  </tfoot>
                 </table>
               </div>
             </section>
@@ -403,7 +628,7 @@ function FinanceiroInner() {
           {showDes ? (
             <section className="painel-block">
               <div className="painel-block-head">
-                <h2>A pagar · Desconexão</h2>
+                <h2>A pagar · Desconexão (espelho planilha)</h2>
                 <span>{data?.quinzena_titulo || "Quinzena"}</span>
               </div>
               <div className="table-wrap">
@@ -489,7 +714,7 @@ function FinanceiroInner() {
 
           <div className="painel-foot">
             <p>
-              Etapa 3 · Financeiro · atualizado{" "}
+              Financeiro OPEX · atualizado{" "}
               {data?.atualizado_em
                 ? new Date(data.atualizado_em).toLocaleString("pt-BR")
                 : "—"}
