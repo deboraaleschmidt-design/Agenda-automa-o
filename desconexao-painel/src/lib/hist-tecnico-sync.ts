@@ -17,7 +17,7 @@ export async function syncHistTecnico(): Promise<HistTecnicoPayload> {
   try {
     const res = await auth.sheets.spreadsheets.values.batchGet({
       spreadsheetId: SPREADSHEET_D1_ID,
-      ranges: ["'HISTÓRICO TÉCNICO'!A1:L400"],
+      ranges: ["'HISTÓRICO TÉCNICO'!A1:N800"],
       valueRenderOption: "FORMATTED_VALUE",
     });
     const rows = res.data.valueRanges?.[0]?.values || [];

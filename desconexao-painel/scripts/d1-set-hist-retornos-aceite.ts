@@ -38,7 +38,7 @@ async function main() {
       "'BASE IAT'!A1:EB",
       "EQUIPE!A1:F40",
       "'PAINEL OK'!A1:J200",
-      "'HISTÓRICO TÉCNICO'!A1:L400",
+      "'HISTÓRICO TÉCNICO'!A1:N800",
       "RETORNOS!A1:V250",
       "'BASE NEUTRA'!A1:Z",
       "'PROMPT NEUTRA'!A1:Z",

@@ -111,7 +111,11 @@ function parseCardAt(
   for (let i = start + 1; i < rows.length; i++) {
     const row = rows[i] || [];
     // Próximo bloco de nomes (nova fileira de cards)
-    if (isNameRow(row, 0) || isNameRow(row, 4) || isNameRow(row, 8)) {
+    if (
+      isNameRow(row, 0) ||
+      isNameRow(row, 5) ||
+      isNameRow(row, 10)
+    ) {
       if (i > start + 1) break;
     }
     const a0 = cell(row, offset);
@@ -202,8 +206,11 @@ export function sortHistoricoCards(cards: HistCard[]): HistCard[] {
   });
 }
 
+/** Layout atual: 3 cards/fileira com 4 cols + 1 spacer (A–D · F–I · K–N). */
+const CARD_OFFSETS = [0, 5, 10] as const;
+
 /**
- * Espelho da aba HISTÓRICO TÉCNICO (cards 3 por fileira, 4 cols cada).
+ * Espelho da aba HISTÓRICO TÉCNICO (cards 3 por fileira).
  * Ordem de exibição: PJ atividades desc → CLT atividades desc.
  */
 export function parseHistoricoTecnico(rows: unknown[][]): {
@@ -221,7 +228,7 @@ export function parseHistoricoTecnico(rows: unknown[][]): {
 
   for (let i = 5; i < rows.length; i++) {
     const row = rows[i] || [];
-    for (const offset of [0, 4, 8]) {
+    for (const offset of CARD_OFFSETS) {
       if (!isNameRow(row, offset)) continue;
       const card = parseCardAt(rows, i, offset);
       if (!card) continue;
