@@ -84,6 +84,27 @@ async function main() {
     c.tecnico.toUpperCase().includes("GABRIEL"),
   );
   assert(gabCard?.vinculo === "PJ", `Gabriel card PJ got ${gabCard?.vinculo}`);
+  const pj = hist.cards.filter((c) => c.vinculo.toUpperCase() === "PJ");
+  const clt = hist.cards.filter((c) => c.vinculo.toUpperCase() !== "PJ");
+  assert(
+    pj[0]?.tecnico.toUpperCase().includes("GILMAR") && pj[0]?.atividades === 169,
+    `PJ 1º Gilmar 169 got ${pj[0]?.tecnico} ${pj[0]?.atividades}`,
+  );
+  assert(
+    pj[pj.length - 1]?.tecnico.toUpperCase().includes("LEANDRO") &&
+      pj[pj.length - 1]?.atividades === 96,
+    `PJ último Leandro 96 got ${pj[pj.length - 1]?.tecnico} ${pj[pj.length - 1]?.atividades}`,
+  );
+  assert(
+    clt[0]?.tecnico.toUpperCase().includes("MARCUS") &&
+      clt[0]?.atividades === 126,
+    `CLT 1º Marcus 126 got ${clt[0]?.tecnico} ${clt[0]?.atividades}`,
+  );
+  assert(
+    clt[clt.length - 1]?.tecnico.toUpperCase().includes("ALEXANDRE") &&
+      clt[clt.length - 1]?.atividades === 64,
+    `CLT último Alexandre 64 got ${clt[clt.length - 1]?.tecnico} ${clt[clt.length - 1]?.atividades}`,
+  );
 
   const ret = parseRetornosSheet(retRows);
   assert(

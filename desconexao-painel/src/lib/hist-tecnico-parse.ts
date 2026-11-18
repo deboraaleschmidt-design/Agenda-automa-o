@@ -185,9 +185,26 @@ function parseCardAt(
   };
 }
 
+function isPjVinculo(v: string): boolean {
+  return fold(v) === "PJ";
+}
+
+/** Debora 18/11 18:23: PJ por atividades desc, depois CLT desc. */
+export function sortHistoricoCards(cards: HistCard[]): HistCard[] {
+  return [...cards].sort((a, b) => {
+    const aPj = isPjVinculo(a.vinculo) ? 0 : 1;
+    const bPj = isPjVinculo(b.vinculo) ? 0 : 1;
+    if (aPj !== bPj) return aPj - bPj;
+    return (
+      b.atividades - a.atividades ||
+      fold(a.tecnico).localeCompare(fold(b.tecnico))
+    );
+  });
+}
+
 /**
  * Espelho da aba HISTÓRICO TÉCNICO (cards 3 por fileira, 4 cols cada).
- * Ordem da planilha: PJ crescente → CLT decrescente.
+ * Ordem de exibição: PJ atividades desc → CLT atividades desc.
  */
 export function parseHistoricoTecnico(rows: unknown[][]): {
   titulo: string;
@@ -197,7 +214,8 @@ export function parseHistoricoTecnico(rows: unknown[][]): {
 } {
   const titulo = cell(rows[0], 0) || "HISTÓRICO TÉCNICO";
   const periodo_nota = cell(rows[1], 0) || cell(rows[3], 0) || "";
-  const ordem_nota = cell(rows[4], 0) || cell(rows[3], 0) || "";
+  const ordem_nota =
+    "ORDEM ▸ PJ (maior → menor nº de atividades)  ·  depois CLT (maior → menor)";
   const cards: HistCard[] = [];
   const seen = new Set<string>();
 
@@ -214,7 +232,12 @@ export function parseHistoricoTecnico(rows: unknown[][]): {
     }
   }
 
-  return { titulo, periodo_nota, ordem_nota, cards };
+  return {
+    titulo,
+    periodo_nota,
+    ordem_nota,
+    cards: sortHistoricoCards(cards),
+  };
 }
 
 export function emptyHistTecnicoPayload(mensagem?: string): HistTecnicoPayload {
