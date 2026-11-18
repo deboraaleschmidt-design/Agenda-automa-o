@@ -231,58 +231,389 @@ export function precoDesconexaoPorServico(
   };
 }
 
-/**
- * Match Tipo O.S (TOA) → item LPU IAT by description (+ CASA/APTO).
- * TOA codes (1, 43…) ≠ LPU items (1,3); match by folded description.
- */
-export function matchLpuIat(
-  osRaw: string,
-  lpu: LpuItem[],
-  complemento: string,
-): { item: LpuItem | null; ambiguous: boolean } {
-  const raw = String(osRaw || "").trim();
-  if (!raw) return { item: null, ambiguous: false };
-  const m = raw.match(/^\s*([\d.,]+)\s*[-–—]?\s*(.*)$/);
-  const codePart = (m?.[1] || "").replace(/\./g, ",").replace(/\s/g, "");
-  const descPart = fold(m?.[2] || raw);
-  if (!descPart && !codePart) return { item: null, ambiguous: false };
+export type IatEndClass = "CASA" | "APTO" | "";
 
-  // Exact LPU item code (ex. "1,3")
-  if (codePart.includes(",")) {
-    const byCode = lpu.find((it) => it.codigo.replace(/\s/g, "") === codePart);
-    if (byCode) return { item: byCode, ambiguous: false };
+/** Complemento: APT/BL/TOR = apto; CASA = casa. */
+export function iatEndClass(complemento: string): IatEndClass {
+  const c = fold(complemento);
+  if (/APT|\bBL\b|TORRE|\bTOR\b|SALA|LOJA|\bLJ\b|EDIFIC/.test(c))
+    return "APTO";
+  if (c.includes("CASA")) return "CASA";
+  return "";
+}
+
+/** Célula Tipo O.S real: "43 - ADESAO - …" (ignora lixo de coluna). */
+export function parseToaOs(
+  osRaw: string,
+): { code: number; desc: string; raw: string } | null {
+  const raw = String(osRaw || "").trim();
+  const m = raw.match(/^\s*(\d+)\s*[-–—]\s*(.*)$/);
+  if (!m) return null;
+  return { code: Number(m[1]), desc: fold(m[2] || ""), raw };
+}
+
+function byCodigo(lpu: LpuItem[], codigo: string): LpuItem | null {
+  const want = codigo.replace(/\s/g, "");
+  return lpu.find((it) => it.codigo.replace(/\s/g, "") === want) || null;
+}
+
+/**
+ * Escolhe CASA/APTO pelo complemento.
+ * NI (sem APT/BL/TOR/CASA): usa CASA como padrão operacional e o caller pode contar no aviso.
+ */
+function pickCasaApto(
+  lpu: LpuItem[],
+  casaCode: string,
+  aptoCode: string,
+  end: IatEndClass,
+): LpuItem | null {
+  const casa = byCodigo(lpu, casaCode);
+  const apto = byCodigo(lpu, aptoCode);
+  if (end === "APTO") return apto || casa;
+  // CASA ou NI → CASA
+  return casa || apto;
+}
+
+function pickDeslocAgreg(
+  lpu: LpuItem[],
+  deslocCode: string,
+  agregCode: string,
+  firstTask: boolean,
+): LpuItem | null {
+  const d = byCodigo(lpu, deslocCode);
+  const a = byCodigo(lpu, agregCode);
+  if (firstTask) return d || a;
+  return a || d;
+}
+
+export type IatPricedOs = {
+  toaCode: number;
+  toaRaw: string;
+  codigo: string;
+  descricao: string;
+  preco: number | null;
+  sem_preco: boolean;
+  motivo_sem?: string;
+};
+
+/**
+ * Precifica lista de Tipo O.S de um contrato (ordem = 1ª deslocamento, demais agregada).
+ * Regras Debora 17/11: casa/apto no complemento; 43 na adesão 1/51 (absorvida — não empilha 2,3);
+ * 43 sozinha = Acesso Virtua 2,4/2,5; 45 na mudança 12/54 → 4,9; chip 208→13,1; retorno 69→−81,66.
+ */
+export function priceIatOsList(
+  osRawList: string[],
+  complemento: string,
+  lpu: LpuItem[],
+): IatPricedOs[] {
+  const end = iatEndClass(complemento);
+  const parsed = osRawList
+    .map(parseToaOs)
+    .filter(Boolean) as Array<{ code: number; desc: string; raw: string }>;
+  const sibling = new Set(parsed.map((p) => p.code));
+  const hasAdesao = sibling.has(1) || sibling.has(51);
+  const out: IatPricedOs[] = [];
+
+  parsed.forEach((p, idx) => {
+    // 43/44 na mesma OS de adesão 1/51 → absorvida (evita PayTV + ponto Virtua em dobro)
+    if (
+      hasAdesao &&
+      (p.code === 43 || p.code === 44)
+    ) {
+      return;
+    }
+    const first = idx === 0;
+    const line = mapToaCode(p, sibling, end, first, lpu);
+    out.push(line);
+  });
+  return out;
+}
+
+function mapToaCode(
+  p: { code: number; desc: string; raw: string },
+  sibling: Set<number>,
+  end: IatEndClass,
+  firstTask: boolean,
+  lpu: LpuItem[],
+): IatPricedOs {
+  const base = (item: LpuItem | null, motivo: string): IatPricedOs => {
+    if (!item) {
+      return {
+        toaCode: p.code,
+        toaRaw: p.raw,
+        codigo: String(p.code),
+        descricao: p.raw,
+        preco: null,
+        sem_preco: true,
+        motivo_sem: motivo,
+      };
+    }
+    if (item.preco == null) {
+      return {
+        toaCode: p.code,
+        toaRaw: p.raw,
+        codigo: item.codigo,
+        descricao: item.descricao,
+        preco: null,
+        sem_preco: true,
+        motivo_sem: `LPU ${item.codigo} sem valor informado`,
+      };
+    }
+    return {
+      toaCode: p.code,
+      toaRaw: p.raw,
+      codigo: item.codigo,
+      descricao: item.descricao,
+      preco: item.preco,
+      sem_preco: false,
+    };
+  };
+
+  // --- mapeamento por código TOA ---
+  switch (p.code) {
+    // Adesão assinatura (TOA 1). Virtua vai na tarefa 43 à parte — não empilhar PayTV+Virtua aqui.
+    case 1: {
+      const withFone =
+        sibling.has(95) ||
+        sibling.has(83) ||
+        p.desc.includes("NET FONE") ||
+        p.desc.includes("VOIP");
+      if (withFone || p.desc.includes("NET FONE")) {
+        const it = pickCasaApto(lpu, "1,5", "1,6", end);
+        return base(it, "adesão PayTV+Fone sem LPU");
+      }
+      if (p.desc.includes("VIRTUA") && p.desc.includes("PAYTV")) {
+        const it = pickCasaApto(lpu, "1,3", "1,4", end);
+        return base(it, "adesão PayTV+Virtua sem LPU");
+      }
+      // "ADESAO - INSTALACAO DE ASSINATURA" (truncado) → PayTV; ponto Virtua = TOA 43
+      const it = pickCasaApto(lpu, "1,7", "1,8", end);
+      return base(it, "adesão PayTV sem LPU");
+    }
+    case 51: {
+      const it = pickCasaApto(lpu, "1,7", "1,8", end);
+      return base(
+        it,
+        end ? "adesão digital sem LPU" : "adesão digital: complemento NI",
+      );
+    }
+    // 43 sozinha (sem adesão 1/51) → Acesso Virtua CASA/APTO (2,4/2,5)
+    case 43:
+    case 44: {
+      const acesso =
+        lpu.find(
+          (it) =>
+            it.foldDesc.includes("ADESAO") &&
+            it.foldDesc.includes("ACESSO VIRTUA") &&
+            (end === "APTO"
+              ? it.foldDesc.includes("APTO")
+              : it.foldDesc.includes("CASA")),
+        ) ||
+        pickCasaApto(lpu, "2,4", "2,5", end) ||
+        byCodigo(lpu, "2,3");
+      return base(acesso, "acesso Virtua sem LPU 2,4/2,5");
+    }
+    // Mudança endereço assinatura (12). Ponto adicional Virtua = TOA 45 à parte.
+    case 12: {
+      const withFone = sibling.has(84) || p.desc.includes("NET FONE");
+      if (withFone) {
+        const it = pickCasaApto(lpu, "4,5", "4,6", end);
+        return base(it, "mudança PayTV+Fone sem LPU");
+      }
+      if (p.desc.includes("VIRTUA") && p.desc.includes("PAYTV")) {
+        const it = pickCasaApto(lpu, "4,3", "4,4", end);
+        return base(it, "mudança PayTV+Virtua sem LPU");
+      }
+      const it = pickCasaApto(lpu, "4,7", "4,8", end);
+      return base(it, "mudança PayTV sem LPU");
+    }
+    case 54: {
+      const it = pickCasaApto(lpu, "4,7", "4,8", end);
+      return base(
+        it,
+        end ? "mudança digital sem LPU" : "mudança digital: complemento NI",
+      );
+    }
+    // 45 na mudança (12/54) → ponto adicional
+    case 45:
+      return base(
+        byCodigo(lpu, "4,9"),
+        "mudança ponto adicional sem LPU 4,9",
+      );
+    // Chip
+    case 208:
+      return base(byCodigo(lpu, "13,1"), "chip sem LPU 13,1");
+    // Retorno credenciada (desconto)
+    case 69:
+      return base(
+        byCodigo(lpu, "7,9") || byCodigo(lpu, "7,1"),
+        "retorno credenciada sem LPU 7,9",
+      );
+    // Mudança de pacote
+    case 24:
+      return base(
+        pickDeslocAgreg(lpu, "4,31", "4,32", firstTask),
+        "mudança de pacote sem LPU 4,31/4,32",
+      );
+    case 57:
+      return base(
+        pickDeslocAgreg(lpu, "4,27", "4,28", firstTask),
+        "mudança pacote digital sem LPU 4,27/4,28",
+      );
+    // Mudança local de ponto (LPU 4,29 desloc / 4,3 agregada — código 4,3 duplicado na aba)
+    case 15: {
+      const desloc = lpu.find(
+        (it) =>
+          it.foldDesc.includes("MUDANCA DE LOCAL DE PONTO") &&
+          it.foldDesc.includes("DESLOCAMENTO"),
+      );
+      const agreg = lpu.find(
+        (it) =>
+          it.foldDesc.includes("MUDANCA DE LOCAL DE PONTO") &&
+          it.foldDesc.includes("AGREGAD"),
+      );
+      const it = firstTask ? desloc || agreg : agreg || desloc;
+      return base(it || null, "mudança local ponto sem LPU");
+    }
+    // Reinstalação / refazer
+    case 33:
+      return base(byCodigo(lpu, "4,19"), "reinstalação sem LPU 4,19");
+    case 31:
+      return base(
+        pickCasaApto(lpu, "4,16", "4,17", end) || byCodigo(lpu, "4,16"),
+        "refazer instalação sem LPU",
+      );
+    case 46:
+      return base(byCodigo(lpu, "4,2"), "reinstalação ponto adicional sem LPU 4,2");
+    // Streaming
+    case 516:
+    case 517:
+    case 514:
+      return base(
+        pickDeslocAgreg(lpu, "1,71", "1,72", firstTask),
+        "streaming sem LPU 1,71/1,72",
+      );
+    // VOIP / Net Fone pontos
+    case 83:
+    case 95:
+      return base(byCodigo(lpu, "3,7"), "ponto Net Fone sem LPU 3,7");
+    case 84:
+      return base(
+        byCodigo(lpu, "6,13"),
+        "mudança ponto Net Fone sem LPU 6,13",
+      );
+    case 101:
+      return base(byCodigo(lpu, "3,7"), "ponto portabilidade sem LPU");
+    default:
+      break;
   }
 
-  const endClass = (() => {
-    const c = fold(complemento);
-    if (/APT|\bBL\b|TORRE|SALA|LOJA|EDIFIC/.test(c)) return "APTO";
-    if (c.includes("CASA")) return "CASA";
-    return "";
-  })();
+  // Fallback: match por descrição (+ CASA/APTO + desloc/agreg)
+  return matchByDescription(p, end, firstTask, lpu);
+}
+
+function matchByDescription(
+  p: { code: number; desc: string; raw: string },
+  end: IatEndClass,
+  firstTask: boolean,
+  lpu: LpuItem[],
+): IatPricedOs {
+  const descPart = p.desc;
+  if (!descPart) {
+    return {
+      toaCode: p.code,
+      toaRaw: p.raw,
+      codigo: String(p.code),
+      descricao: p.raw,
+      preco: null,
+      sem_preco: true,
+      motivo_sem: "sem descrição TOA",
+    };
+  }
 
   let candidates = lpu.filter((it) => {
     if (!it.foldDesc) return false;
-    if (descPart && it.foldDesc.includes(descPart)) return true;
-    if (descPart && descPart.includes(it.foldDesc) && it.foldDesc.length >= 12)
-      return true;
-    // loose: all significant tokens
+    if (it.foldDesc.includes(descPart)) return true;
+    if (descPart.includes(it.foldDesc) && it.foldDesc.length >= 12) return true;
     const tokens = descPart.split(" ").filter((t) => t.length > 3);
     if (tokens.length < 2) return false;
     return tokens.every((t) => it.foldDesc.includes(t));
   });
 
-  if (endClass && candidates.length > 1) {
-    const narrowed = candidates.filter((it) => it.foldDesc.includes(endClass));
+  if (end && candidates.length > 1) {
+    const narrowed = candidates.filter((it) => it.foldDesc.includes(end));
     if (narrowed.length) candidates = narrowed;
   }
 
-  if (candidates.length === 1) return { item: candidates[0], ambiguous: false };
-  if (candidates.length > 1) {
-    // Prefer exact-ish: LPU desc without extra tokens beyond OS desc + CASA/APTO
-    const priced = candidates.filter((c) => c.preco != null);
-    if (priced.length === 1) return { item: priced[0], ambiguous: false };
-    // Ambíguo → não assumir preço (pedido: sem preço, não inventar)
-    return { item: null, ambiguous: true };
+  const hasPair = candidates.some((c) => c.foldDesc.includes("DESLOCAMENTO"));
+  if (hasPair && candidates.length > 1) {
+    const want = firstTask ? "DESLOCAMENTO" : "AGREGAD";
+    const narrowed = candidates.filter((it) => it.foldDesc.includes(want));
+    if (narrowed.length) candidates = narrowed;
   }
-  return { item: null, ambiguous: false };
+
+  if (candidates.length === 1) {
+    const item = candidates[0];
+    return {
+      toaCode: p.code,
+      toaRaw: p.raw,
+      codigo: item.codigo,
+      descricao: item.descricao,
+      preco: item.preco,
+      sem_preco: item.preco == null,
+      motivo_sem:
+        item.preco == null ? `LPU ${item.codigo} sem valor informado` : undefined,
+    };
+  }
+  if (candidates.length > 1) {
+    const priced = candidates.filter((c) => c.preco != null);
+    if (priced.length === 1) {
+      const item = priced[0];
+      return {
+        toaCode: p.code,
+        toaRaw: p.raw,
+        codigo: item.codigo,
+        descricao: item.descricao,
+        preco: item.preco,
+        sem_preco: false,
+      };
+    }
+    return {
+      toaCode: p.code,
+      toaRaw: p.raw,
+      codigo: String(p.code),
+      descricao: p.raw,
+      preco: null,
+      sem_preco: true,
+      motivo_sem: `ambíguo LPU (${candidates.length} candidatos)`,
+    };
+  }
+  return {
+    toaCode: p.code,
+    toaRaw: p.raw,
+    codigo: String(p.code),
+    descricao: p.raw,
+    preco: null,
+    sem_preco: true,
+    motivo_sem: `TOA ${p.code} sem casamento LPU`,
+  };
+}
+
+/** Compat: um OS isolado (sem irmãos / índice 0). */
+export function matchLpuIat(
+  osRaw: string,
+  lpu: LpuItem[],
+  complemento: string,
+): { item: LpuItem | null; ambiguous: boolean } {
+  const lines = priceIatOsList([osRaw], complemento, lpu);
+  if (!lines.length) return { item: null, ambiguous: false };
+  const line = lines[0];
+  if (line.sem_preco) {
+    return {
+      item: null,
+      ambiguous: Boolean(line.motivo_sem?.includes("ambíguo")),
+    };
+  }
+  const item = byCodigo(lpu, line.codigo);
+  return { item, ambiguous: false };
 }

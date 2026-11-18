@@ -92,11 +92,19 @@ export const SPREADSHEET_LPU_ID =
   "16JYdGm7WraN8AtjqGcpE-bE2eXyfRhrixujZY_JYEPc";
 
 export const TECH_LABELS: Record<string, string> = {
-  Z698465: "Guilherme",
-  Z698466: "Alexandre",
-  SMA: "Valter",
+  Z698465: "Guilherme Santos Becker",
+  Z698466: "Alexandre de Jesus Fraga",
+  SMA: "Valter Becker",
   TCI: "TCI",
 };
+
+/** Salário CLT provisório (único configurável) — OPEX 17/11. */
+export const CLT_SALARIO_PROVISORIO = 3245.67;
+/**
+ * PJ R$ / unidade produtiva (único configurável).
+ * Neutra = atividade produtiva (SA OK); IAT = OS produtiva (baixa 409), não por tarefa.
+ */
+export const PJ_RATE_ATIVIDADE = 90;
 
 export const MONTH_KEYS = [
   "JAN",

@@ -9,20 +9,21 @@ import {
   type FinanceSubtotal,
   type FinanceTechOk,
 } from "./finance-parse";
+import { buildFinanceOpex } from "./finance-opex";
 import {
   listMesesBase,
-  parseBaseIatRegs,
+  mergeBaseAndPromptIat,
   resolveMesRange,
   type IatReg,
 } from "./iat-base-engine";
 import { parseEquipe } from "./iat-parse";
 import {
-  matchLpuIat,
   menorPrecoDesconexao,
   parseLpuDesconexao,
   parseLpuIat,
   parseLpuTelemont1,
   precoDesconexaoPorServico,
+  priceIatOsList,
   type LpuItem,
 } from "./lpu-parse";
 import {
@@ -46,6 +47,7 @@ import {
 import { mapRespostasHeader, normalizeServico } from "./servico";
 import { sheetsAuthOrNull } from "./sheets-client";
 import {
+  PJ_RATE_ATIVIDADE,
   SPREADSHEET_D1_ID,
   SPREADSHEET_ID,
   SPREADSHEET_LPU_ID,
@@ -290,17 +292,23 @@ function buildIatAtividades(
       sem: boolean;
     }
   >();
+  const semMotivo = new Map<string, number>();
   let semMatch = 0;
-  let ambig = 0;
+  let garbageOs = 0;
 
   for (const r of Object.values(ultimo)) {
-    const oss = r.osRaw.length ? r.osRaw : [];
-    if (!oss.length) {
+    const priced = priceIatOsList(r.osRaw, r.comp, lpu);
+    const rawReal = r.osRaw.filter((os) => /^\s*\d+\s*[-–—]/.test(String(os)));
+    garbageOs += Math.max(0, r.osRaw.filter(Boolean).length - rawReal.length);
+
+    if (!priced.length) {
       semMatch += 1;
+      const motivo = "Sem Tipo O.S válido na BASE";
+      semMotivo.set(motivo, (semMotivo.get(motivo) || 0) + 1);
       const key = "sem-os|Sem Tipo O.S|x";
       const cur = buckets.get(key) || {
         codigo: "—",
-        descricao: "Sem Tipo O.S na BASE",
+        descricao: motivo,
         qtd: 0,
         preco: null,
         sem: true,
@@ -309,35 +317,22 @@ function buildIatAtividades(
       buckets.set(key, cur);
       continue;
     }
-    for (const os of oss) {
-      const { item, ambiguous } = matchLpuIat(os, lpu, r.comp);
-      if (ambiguous) ambig += 1;
-      if (!item) {
+
+    for (const line of priced) {
+      if (line.sem_preco) {
         semMatch += 1;
-        const m = String(os).match(/^\s*([\d.,]+)\s*[-–—]?\s*(.*)$/);
-        const codigo = (m?.[1] || "—").trim();
-        const desc = ((m?.[2] || os).trim() || os) + (ambiguous ? " (ambíguo LPU)" : "");
-        const key = `${codigo}|${desc}|x`;
-        const cur = buckets.get(key) || {
-          codigo,
-          descricao: desc,
-          qtd: 0,
-          preco: null,
-          sem: true,
-        };
-        cur.qtd += 1;
-        buckets.set(key, cur);
-        continue;
+        const motivo = line.motivo_sem || `TOA ${line.toaCode} sem preço`;
+        semMotivo.set(motivo, (semMotivo.get(motivo) || 0) + 1);
       }
-      const sem = item.preco == null;
-      if (sem) semMatch += 1;
-      const key = `${item.codigo}|${item.descricao}|${item.preco ?? "x"}`;
+      const key = `${line.codigo}|${line.descricao}|${line.preco ?? "x"}|${line.sem_preco ? 1 : 0}`;
       const cur = buckets.get(key) || {
-        codigo: item.codigo,
-        descricao: item.descricao,
+        codigo: line.codigo,
+        descricao: line.sem_preco
+          ? `${line.descricao}${line.motivo_sem ? ` · ${line.motivo_sem}` : ""}`
+          : line.descricao,
         qtd: 0,
-        preco: item.preco,
-        sem,
+        preco: line.preco,
+        sem: line.sem_preco,
       };
       cur.qtd += 1;
       buckets.set(key, cur);
@@ -345,13 +340,18 @@ function buildIatAtividades(
   }
 
   if (semMatch) {
+    const top = [...semMotivo.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([m, n]) => `${n}× ${m}`)
+      .join("; ");
     avisos.push(
-      `IAT: ${semMatch} serviço(s) sem preço LPU casado (exibidos como «sem preço»).`,
+      `IAT: ${semMatch} serviço(s) sem preço LPU. Motivos: ${top}.`,
     );
   }
-  if (ambig) {
+  if (garbageOs) {
     avisos.push(
-      `IAT: ${ambig} casamento(s) LPU ambíguo(s) → «sem preço» (não assumido).`,
+      `IAT: ${garbageOs} célula(s) Tipo O.S ignorada(s) (não no formato «código - descrição»).`,
     );
   }
 
@@ -362,9 +362,13 @@ function buildIatAtividades(
       descricao: b.descricao,
       quantidade: b.qtd,
       preco_unitario: b.preco,
-      valor: b.sem || b.preco == null ? null : Math.round(b.qtd * b.preco * 100) / 100,
+      valor:
+        b.sem || b.preco == null
+          ? null
+          : Math.round(b.qtd * b.preco * 100) / 100,
       sem_preco: b.sem,
-      origem_lpu: "LPU · IAT (casamento por descrição Tipo O.S)",
+      origem_lpu:
+        "LPU · IAT (TOA→LPU · 1ª tarefa deslocamento · casa/apto no complemento)",
     }))
     .sort((a, b) => b.quantidade - a.quantidade);
 
@@ -625,7 +629,7 @@ export async function syncFinanceiro(opts?: {
       }),
       auth.sheets.spreadsheets.values.batchGet({
         spreadsheetId: SPREADSHEET_D1_ID,
-        ranges: ["'BASE IAT'!A1:DO", "EQUIPE!A1:F40"],
+        ranges: ["'BASE IAT'!A1:DO", "'PROMPT IAT'!A1:DO", "EQUIPE!A1:F40"],
         valueRenderOption: "FORMATTED_VALUE",
       }),
       SPREADSHEET_NEUTRA_ID
@@ -651,7 +655,8 @@ export async function syncFinanceiro(opts?: {
 
     const d1Ranges = d1Res.data.valueRanges || [];
     const baseRows = d1Ranges[0]?.values || [];
-    const eqRows = d1Ranges[1]?.values || [];
+    const promptRows = d1Ranges[1]?.values || [];
+    const eqRows = d1Ranges[2]?.values || [];
 
     const neutraRanges = neutraRes.data.valueRanges || [];
     const neutraBase = neutraRanges[0]?.values || [];
@@ -667,7 +672,7 @@ export async function syncFinanceiro(opts?: {
     const fatFiltrado = filterFaturamentoPorMes(fat.meses, mes);
 
     const des = buildDesconexaoAtividades(respostas, mes, lpuDes);
-    const { regs } = parseBaseIatRegs(baseRows);
+    const { regs, promptDays } = mergeBaseAndPromptIat(baseRows, promptRows);
     const iat = buildIatAtividades(regs, eqRows, mes, lpuIat.items);
 
     const neutraEquipe = parseEquipeNeutra(neutraEq);
@@ -727,11 +732,54 @@ export async function syncFinanceiro(opts?: {
       ...(showNeutra ? neutraParseAvisos : []),
       ...(showNeutra ? neutra.avisos : []),
       ...(fatAviso ? [fatAviso] : []),
-      "Pagamento a técnico IAT: NÃO INFORMADO — não inventado.",
+      ...(promptDays.length
+        ? [
+            `IAT: PROMPT usado nos dias ausentes na BASE (${promptDays
+              .map((k) => `${k.slice(8, 10)}/${k.slice(5, 7)}`)
+              .join(", ")}).`,
+          ]
+        : []),
       iat.gabrielNota,
     ];
 
     const meses_disponiveis = mergeMeses(fat.meses, iat.meses, neutra.meses);
+
+    const receitaSeg =
+      segmento === "desconexao"
+        ? subDes.valor_faturar
+        : segmento === "iat"
+          ? subIat.valor_faturar
+          : segmento === "neutra"
+            ? subNeutra.valor_faturar
+            : subGeral.valor_faturar;
+    const semPrecoSeg =
+      segmento === "desconexao"
+        ? subDes.sem_preco
+        : segmento === "iat"
+          ? subIat.sem_preco
+          : segmento === "neutra"
+            ? subNeutra.sem_preco
+            : subGeral.sem_preco;
+
+    const neutraEquipeByTt = new Map<
+      string,
+      { nome: string; tipo: string }
+    >();
+    for (const e of neutraEquipe) {
+      if (e.tt) neutraEquipeByTt.set(e.tt, { nome: e.nome, tipo: e.tipo });
+    }
+    const eqList = parseEquipe(eqRows);
+    const opexPack = buildFinanceOpex({
+      segmento,
+      mes,
+      receita: receitaSeg,
+      semPreco: semPrecoSeg,
+      aPagar: pagar.linhas,
+      iatRegs: regs,
+      iatEquipe: eqList,
+      neutraRegs,
+      neutraEquipeByTt,
+    });
 
     return {
       atualizado_em: new Date().toISOString(),
@@ -741,6 +789,12 @@ export async function syncFinanceiro(opts?: {
       mes,
       segmento,
       meses_disponiveis,
+      setores: [
+        { id: "desconexao", label: "DESCONEXÃO" },
+        { id: "iat", label: "IAT" },
+        { id: "neutra", label: "NEUTRA" },
+        { id: "todos", label: "TODOS" },
+      ],
       lpu_origem: {
         desconexao: "LPU · Desconexão (preço bruto c/ impostos)",
         iat: `LPU · IAT${
@@ -763,9 +817,12 @@ export async function syncFinanceiro(opts?: {
       a_pagar: showDes ? pagar.linhas : [],
       total_a_pagar: showDes ? pagar.total : 0,
       a_pagar_iat_nota:
-        "IAT: sem tabela de pagamento a técnico na planilha — só faturamento LPU.",
+        `IAT: pagamento PJ R$${PJ_RATE_ATIVIDADE}/OS produtiva (baixa 409) · improdutiva sem pagamento · CLT salário provisório (prévia OPEX).`,
       faturamento_meses: fatFiltrado.length ? fatFiltrado : fat.meses,
       faturamento_ago_mais: fat.agoMais,
+      pagamento_quinzenas: opexPack.quinzenas,
+      visao_mensal: opexPack.mensal,
+      opex: opexPack.opex,
       duvidas,
       gabriel_nota: iat.gabrielNota,
     };

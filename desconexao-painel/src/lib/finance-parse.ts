@@ -45,6 +45,44 @@ export type FinanceSubtotal = {
   a_pagar: number | null;
 };
 
+export type QuinzenaPagLinha = {
+  tecnico: string;
+  tipo: "PJ" | "CLT" | "parceiro" | "sem_custo";
+  atividades: number;
+  valor: number | null;
+  nota?: string;
+};
+
+export type QuinzenaBloco = {
+  id: "1a" | "2a";
+  titulo: string;
+  corte: string;
+  pago_em: string;
+  linhas: QuinzenaPagLinha[];
+  total: number;
+};
+
+export type OpexLinha = {
+  tecnico: string;
+  categoria: "PJ" | "CLT" | "parceiro" | "sem_custo";
+  detalhe: string;
+  valor: number | null;
+};
+
+export type OpexBloco = {
+  receita: number;
+  custo_pj: number;
+  custo_clt: number;
+  custo_parceiro: number;
+  custo_total: number;
+  lucro: number;
+  margem: number | null;
+  sem_preco: number;
+  linhas: OpexLinha[];
+  salario_clt: number;
+  rate_pj: number;
+};
+
 export type FinancePayload = {
   atualizado_em: string;
   fonte: "sheets" | "fixture";
@@ -53,6 +91,8 @@ export type FinancePayload = {
   mes: string;
   segmento: FinanceSegmento;
   meses_disponiveis: string[];
+  /** Setores conhecidos + reserva para novos. */
+  setores: Array<{ id: FinanceSegmento | string; label: string }>;
   lpu_origem: {
     desconexao: string;
     iat: string;
@@ -75,6 +115,14 @@ export type FinancePayload = {
   a_pagar_iat_nota: string;
   faturamento_meses: FaturamentoMes[];
   faturamento_ago_mais: { recolhas: number; valor: number };
+  /** Prévia OPEX 17/11: quinzenas PJ + mensal + custo×receita. */
+  pagamento_quinzenas: QuinzenaBloco[];
+  visao_mensal: {
+    titulo: string;
+    total_pago: number;
+    linhas: QuinzenaPagLinha[];
+  };
+  opex: OpexBloco | null;
   duvidas: string[];
   gabriel_nota?: string;
 };
@@ -98,6 +146,12 @@ export function emptyFinancePayload(
     mes,
     segmento,
     meses_disponiveis: [],
+    setores: [
+      { id: "desconexao", label: "DESCONEXÃO" },
+      { id: "iat", label: "IAT" },
+      { id: "neutra", label: "NEUTRA" },
+      { id: "todos", label: "TODOS" },
+    ],
     lpu_origem: {
       desconexao: "LPU · Desconexão",
       iat: "LPU · IAT",
@@ -119,6 +173,9 @@ export function emptyFinancePayload(
       "Pagamento a técnico IAT: NÃO INFORMADO na planilha — só faturamento LPU.",
     faturamento_meses: [],
     faturamento_ago_mais: { recolhas: 0, valor: 0 },
+    pagamento_quinzenas: [],
+    visao_mensal: { titulo: "", total_pago: 0, linhas: [] },
+    opex: null,
     duvidas: [],
   };
 }
