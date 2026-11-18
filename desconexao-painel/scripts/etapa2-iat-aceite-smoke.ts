@@ -54,10 +54,21 @@ async function main() {
     `dados até 11/11 got ${nov.dados_ate_br}`,
   );
   assert(
-    nov.meses_disponiveis.includes("2026-10") &&
-      nov.meses_disponiveis.includes("2026-11") &&
-      !nov.meses_disponiveis.includes("2026-09"),
-    `meses BASE out+nov got ${nov.meses_disponiveis.join(",")}`,
+    nov.meses_disponiveis.includes("2026-09") &&
+      nov.meses_disponiveis.includes("2026-10") &&
+      nov.meses_disponiveis.includes("2026-11"),
+    `meses BASE set+out+nov got ${nov.meses_disponiveis.join(",")}`,
+  );
+
+  const set = buildIatFromBase({
+    baseRows,
+    equipeRows: eqRows,
+    mes: "2026-09",
+  });
+  const setTot = set.resumo.find((r) => r.base === "TOTAL");
+  assert(
+    (setTot?.produtivas || 0) > 0,
+    `SET produtivas > 0 got ${setTot?.produtivas}`,
   );
 
   const out = buildIatFromBase({

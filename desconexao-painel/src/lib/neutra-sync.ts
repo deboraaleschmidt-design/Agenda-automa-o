@@ -20,14 +20,24 @@ export async function syncNeutra(mes = "TOTAL"): Promise<NeutraPayload> {
   try {
     const res = await auth.sheets.spreadsheets.values.batchGet({
       spreadsheetId: SPREADSHEET_NEUTRA_ID,
-      ranges: ["'BASE NEUTRA'!A1:Z", "'EQUIPE NEUTRA'!A1:H80"],
+      ranges: [
+        "'BASE NEUTRA'!A1:Z",
+        "'PROMPT NEUTRA'!A1:Z",
+        "'EQUIPE NEUTRA'!A1:H80",
+      ],
       valueRenderOption: "FORMATTED_VALUE",
     });
     const ranges = res.data.valueRanges || [];
     const baseRows = ranges[0]?.values || [];
-    const eqRows = ranges[1]?.values || [];
+    const promptRows = ranges[1]?.values || [];
+    const eqRows = ranges[2]?.values || [];
+    // PROMPT + BASE, dedupe por Número SA (PROMPT por último sobrescreve).
+    const merged =
+      promptRows.length > 1
+        ? [baseRows[0] || promptRows[0], ...baseRows.slice(1), ...promptRows.slice(1)]
+        : baseRows;
     return buildNeutraFromBase({
-      baseRows,
+      baseRows: merged,
       equipeRows: eqRows,
       mes,
     });

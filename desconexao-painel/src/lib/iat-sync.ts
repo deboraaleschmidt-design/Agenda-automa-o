@@ -1,5 +1,9 @@
 import { buildIatFromBase } from "./iat-base-engine";
-import { emptyIatPayload, type IatPayload } from "./iat-parse";
+import {
+  emptyIatPayload,
+  parsePainelOk,
+  type IatPayload,
+} from "./iat-parse";
 import { sheetsAuthOrNull } from "./sheets-client";
 import { SPREADSHEET_D1_ID } from "./types";
 
@@ -17,17 +21,42 @@ export async function syncIat(mes = "TOTAL"): Promise<IatPayload> {
   try {
     const res = await auth.sheets.spreadsheets.values.batchGet({
       spreadsheetId: SPREADSHEET_D1_ID,
-      ranges: ["'BASE IAT'!A1:DO", "EQUIPE!A1:F40"],
+      ranges: [
+        // DP:EB = colunas novas SET (18/11); EB cobre o bloco.
+        "'BASE IAT'!A1:EB",
+        "EQUIPE!A1:F40",
+        "'PAINEL OK'!A1:J200",
+      ],
       valueRenderOption: "FORMATTED_VALUE",
     });
     const ranges = res.data.valueRanges || [];
     const baseRows = ranges[0]?.values || [];
     const eqRows = ranges[1]?.values || [];
+    const painelOkRows = ranges[2]?.values || [];
     const built = buildIatFromBase({
       baseRows,
       equipeRows: eqRows,
       mes,
     });
+
+    // PAINEL OK = aba fixa (até 17/11) — leitura, sem recalcular.
+    const fromSheet = parsePainelOk(painelOkRows);
+    const painel_ok = fromSheet.resumo
+      ? {
+          resumo: fromSheet.resumo,
+          tecnicos: fromSheet.tecnicos,
+          irreprodutiveis: [
+            "Fonte: aba PAINEL OK (valores fixos na planilha · só leitura).",
+          ],
+        }
+      : {
+          resumo: built.painel_ok.resumo,
+          tecnicos: built.painel_ok.tecnicos,
+          irreprodutiveis: [
+            ...(built.painel_ok.irreprodutiveis || []),
+            "Aba PAINEL OK sem resumo legível — fallback BASE IAT.",
+          ],
+        };
 
     return {
       atualizado_em: new Date().toISOString(),
@@ -42,11 +71,8 @@ export async function syncIat(mes = "TOTAL"): Promise<IatPayload> {
       blocos: built.blocos,
       resumo: built.resumo,
       ranking: built.ranking,
-      painel_ok: {
-        resumo: built.painel_ok.resumo,
-        tecnicos: built.painel_ok.tecnicos,
-        irreprodutiveis: built.painel_ok.irreprodutiveis,
-      },
+      painel_ok,
+      // Retorno legado na /iat: preferir página /retornos (aba RETORNOS).
       retorno: built.retorno,
       equipe: built.equipe,
     };

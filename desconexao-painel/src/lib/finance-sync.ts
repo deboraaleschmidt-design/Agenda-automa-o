@@ -260,8 +260,8 @@ function buildIatAtividades(
 
   const gabriel = eqList.find((e) => fold(e.nome).includes("GABRIEL"));
   const gabrielNota = gabriel
-    ? `Gabriel (${gabriel.login}): EQUIPE ainda marca ${gabriel.tipo || "—"}; regra Debora: PJ desde 12/11/2026.`
-    : "Gabriel: não encontrado na EQUIPE.";
+    ? `Gabriel Oliveira de Oliveira (${gabriel.login}): vínculo ${gabriel.tipo || "PJ"} · custo PJ (regra Debora 18/11).`
+    : "Gabriel Oliveira de Oliveira: não encontrado na EQUIPE · regra = PJ.";
 
   const meses = listMesesBase(regs);
   const maxKey = regs.reduce((m, r) => (r.dt.key > m ? r.dt.key : m), "2026-10-01");
