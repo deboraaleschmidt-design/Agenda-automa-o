@@ -275,7 +275,8 @@ export function filterFaturamentoPorMes(
   meses: FaturamentoMes[],
   mes: string,
 ): FaturamentoMes[] {
-  if (mes.trim().toUpperCase() === "TOTAL") {
+  const raw = mes.trim();
+  if (raw.toUpperCase() === "TOTAL") {
     // Financeiro Desconexão foca AGO+
     return meses.filter((row) => {
       const u = row.mes.toLowerCase();
@@ -289,7 +290,6 @@ export function filterFaturamentoPorMes(
       );
     });
   }
-  const [y, m] = mes.split("-");
   const names: Record<number, string[]> = {
     1: ["janeiro"],
     2: ["fevereiro"],
@@ -304,6 +304,11 @@ export function filterFaturamentoPorMes(
     11: ["novembro"],
     12: ["dezembro"],
   };
+  // Ano inteiro YYYY
+  if (/^\d{4}$/.test(raw)) {
+    return meses.filter((row) => row.mes.toLowerCase().includes(raw));
+  }
+  const [y, m] = raw.split("-");
   const mi = Number(m);
   const labels = names[mi] || [];
   return meses.filter((row) => {

@@ -250,9 +250,10 @@ export type MesRange = {
   months: Array<{ y: number; m: number }>;
 };
 
-/** Recorte da visão: mês YYYY-MM ou TOTAL (set≥22/09 + out + nov…). */
+/** Recorte: TOTAL | YYYY (ano inteiro) | YYYY-MM (mês). Desde 22/09. */
 export function resolveMesRange(mes: string, maxKey?: string): MesRange {
-  const mesReq = mes.trim().toUpperCase() === "TOTAL" ? "TOTAL" : mes.trim();
+  const raw = mes.trim();
+  const mesReq = raw.toUpperCase() === "TOTAL" ? "TOTAL" : raw;
   const endCap = maxKey || "2099-12-31";
   if (mesReq === "TOTAL") {
     // Meses concretos preenchidos em buildIatFromBase a partir da BASE.
@@ -262,6 +263,22 @@ export function resolveMesRange(mes: string, maxKey?: string): MesRange {
       end: endCap,
       months: [],
     };
+  }
+  // Ano inteiro: YYYY
+  if (/^\d{4}$/.test(mesReq)) {
+    const y = Number(mesReq);
+    let start = `${y}-01-01`;
+    let end = `${y}-12-31`;
+    if (start < HIST_START) start = HIST_START;
+    if (end > endCap) end = endCap;
+    const months: Array<{ y: number; m: number }> = [];
+    for (let m = 1; m <= 12; m++) {
+      const ms = `${y}-${pad(m)}-01`;
+      const me = `${y}-${pad(m)}-${pad(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
+      if (me < start || ms > end) continue;
+      months.push({ y, m });
+    }
+    return { mesReq, start, end, months };
   }
   const [ys, ms] = mesReq.split("-");
   const y = Number(ys);
@@ -1137,7 +1154,9 @@ export function buildIatFromBase(opts: {
   const mesLabel =
     mesReq === "TOTAL"
       ? "TOTAL · BASE IAT (desde 22/09)"
-      : `BASE IAT · ${mesReq}`;
+      : /^\d{4}$/.test(mesReq)
+        ? `BASE IAT · TOTAL ${mesReq}`
+        : `BASE IAT · ${mesReq}`;
   const promptNota =
     promptDays.length > 0
       ? ` · PROMPT dias ${promptDays.map((k) => `${k.slice(8, 10)}/${k.slice(5, 7)}`).join(", ")}`

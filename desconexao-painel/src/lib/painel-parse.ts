@@ -455,18 +455,21 @@ export function rowMonthKey(
   );
 }
 
-/** Include row for YYYY-MM or TOTAL (tipos/KPIs desde ago/2026). */
+/** Include row for TOTAL | YYYY | YYYY-MM (tipos/KPIs desde ago/2026). */
 export function rowMatchesMes(
   mk: { y: number; m: number } | null,
   mes: string,
 ): boolean {
   if (!mk) return false;
-  const isTotal = mes.trim().toUpperCase() === "TOTAL";
-  if (isTotal) {
+  const raw = mes.trim();
+  if (raw.toUpperCase() === "TOTAL") {
     return !(
       mk.y < TIPOS_DESDE.y ||
       (mk.y === TIPOS_DESDE.y && mk.m < TIPOS_DESDE.m)
     );
+  }
+  if (/^\d{4}$/.test(raw)) {
+    return mk.y === Number(raw);
   }
   const target = parseMesParam(mes);
   return !!target && mk.y === target.y && mk.m === target.m;
@@ -486,7 +489,9 @@ export function recolhidosOficiaisNoMes(
   mes: string,
 ): number | null {
   const cidades = parseCidadesFromPainel(painelRows);
-  if (mes.trim().toUpperCase() === "TOTAL") {
+  const raw = mes.trim();
+  if (raw.toUpperCase() === "TOTAL" || /^\d{4}$/.test(raw)) {
+    // Rótulos SET/OUT na aba são sem ano; TOTAL e YYYY somam o bloco disponível.
     const fromEvo = cidades.evolucao_mensal.reduce(
       (s, e) => s + (e.recolhas || 0),
       0,
@@ -745,6 +750,7 @@ export function aggregateServicos(
 export function isMesOrTotal(mes: string): boolean {
   const t = mes.trim();
   if (t.toUpperCase() === "TOTAL") return true;
+  if (/^\d{4}$/.test(t)) return true;
   return !!parseMesParam(t);
 }
 

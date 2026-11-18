@@ -27,7 +27,7 @@ export async function syncRetornos(): Promise<RetornosPayload> {
       fonte: "sheets",
       status: "ok",
       ...parsed,
-      meses_disponiveis: ["TOTAL", "2026-09", "2026-10", "2026-11"],
+      meses_disponiveis: ["2026-09", "2026-10", "2026-11"],
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

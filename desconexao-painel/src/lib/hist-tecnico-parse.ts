@@ -257,19 +257,27 @@ export function emptyHistTecnicoPayload(mensagem?: string): HistTecnicoPayload {
     periodo_nota: "",
     ordem_nota: "",
     cards: [],
-    meses_disponiveis: ["TOTAL", "2026-09", "2026-10", "2026-11"],
+    meses_disponiveis: ["2026-09", "2026-10", "2026-11"],
   };
 }
 
-/** Filtra linhas de mês no card (TOTAL = todos). */
+/** Filtra linhas de mês no card (TOTAL | YYYY | YYYY-MM). */
 export function filterCardMes(card: HistCard, mes: string): HistCard {
-  if (mes.trim().toUpperCase() === "TOTAL") return card;
+  const raw = mes.trim();
+  if (raw.toUpperCase() === "TOTAL" || /^\d{4}$/.test(raw)) {
+    // Cards atuais são 2026 (SET–NOV); ano inteiro = todos os blocos do card.
+    return card;
+  }
   const map: Record<string, string> = {
     "2026-09": "SET",
     "2026-10": "OUT",
     "2026-11": "NOV",
+    "09": "SET",
+    "10": "OUT",
+    "11": "NOV",
   };
-  const want = map[mes.trim()] || mes.trim().toUpperCase();
+  const mm = raw.includes("-") ? raw.slice(5, 7) : raw;
+  const want = map[raw] || map[mm] || raw.toUpperCase();
   const meses = card.meses.filter((m) => m.chave === want);
   const subQ = meses.reduce((s, m) => s + m.subtotal_qtde, 0);
   const subV =

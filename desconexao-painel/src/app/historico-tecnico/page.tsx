@@ -2,19 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AuthGate from "../../components/AuthGate";
-import MesVisaoSelector from "../../components/MesVisaoSelector";
+import PeriodoVisaoSelector from "../../components/PeriodoVisaoSelector";
 import {
   filterCardMes,
   type HistCard,
   type HistTecnicoPayload,
 } from "../../lib/hist-tecnico-parse";
+import { labelPeriodo } from "../../lib/periodo";
 
-const MES_OPTIONS: Array<[string, string]> = [
-  ["TOTAL", "TOTAL"],
-  ["2026-09", "SET"],
-  ["2026-10", "OUT"],
-  ["2026-11", "NOV"],
-];
+const FALLBACK_MESES = ["2026-09", "2026-10", "2026-11"];
 
 function HistInner() {
   const [data, setData] = useState<HistTecnicoPayload | null>(null);
@@ -102,9 +98,10 @@ function HistInner() {
             </a>
           </div>
           <div className="painel-controls">
-            <MesVisaoSelector
+            <PeriodoVisaoSelector
               value={mes}
-              options={MES_OPTIONS}
+              mesesDisponiveis={data?.meses_disponiveis || FALLBACK_MESES}
+              fallbackMeses={FALLBACK_MESES}
               onChange={setMes}
             />
             <button
@@ -124,7 +121,7 @@ function HistInner() {
           <div className="ops-lead reveal">
             <div>
               <p className="ops-kicker">Leitura só · cards por técnico</p>
-              <h1 className="ops-title">Histórico Técnico</h1>
+              <h1 className="ops-title">{labelPeriodo(mes)}</h1>
               <p className="ops-sub">{data?.titulo || "—"}</p>
             </div>
           </div>

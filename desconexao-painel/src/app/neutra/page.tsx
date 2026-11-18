@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AuthGate from "../../components/AuthGate";
-import MesVisaoSelector from "../../components/MesVisaoSelector";
+import PeriodoVisaoSelector from "../../components/PeriodoVisaoSelector";
 import type {
   NeutraPayload,
   NeutraVisaoDiaRow,
 } from "../../lib/neutra-parse";
+import { labelPeriodo } from "../../lib/periodo";
 
 function pct(n: number): string {
   return `${(Math.round(n * 1000) / 10).toLocaleString("pt-BR", {
@@ -22,52 +23,13 @@ function num1(n: number): string {
   });
 }
 
-const MES_NAMES = [
-  "",
-  "Janeiro",
-  "Fevereiro",
-  "Março",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
-];
+const FALLBACK_MESES = ["2026-09", "2026-10", "2026-11"];
 
 function monthLabel(mes: string): string {
   if (mes.trim().toUpperCase() === "TOTAL") return "TOTAL · BASE NEUTRA";
-  const [y, m] = mes.split("-");
-  return `${MES_NAMES[Number(m)] || m} ${y}`;
+  if (/^\d{4}$/.test(mes.trim())) return `TOTAL · ${mes.trim()}`;
+  return labelPeriodo(mes);
 }
-
-function mesBtnLabel(ym: string): string {
-  const [y, m] = ym.split("-");
-  const short = [
-    "",
-    "Jan",
-    "Fev",
-    "Mar",
-    "Abr",
-    "Mai",
-    "Jun",
-    "Jul",
-    "Ago",
-    "Set",
-    "Out",
-    "Nov",
-    "Dez",
-  ];
-  return `${short[Number(m)] || m}/${y}`;
-}
-
-const MES_FALLBACK: Array<[string, string]> = [
-  ["TOTAL", "TOTAL"],
-  ["2026-11", "Nov/2026"],
-];
 
 function NeutraInner() {
   const [data, setData] = useState<NeutraPayload | null>(null);
@@ -123,15 +85,6 @@ function NeutraInner() {
     void load(mes, true);
   }, [load, mes, ready]);
 
-  const mesOptions = useMemo((): Array<[string, string]> => {
-    const meses = data?.meses_disponiveis || [];
-    if (!meses.length) return MES_FALLBACK;
-    return [
-      ["TOTAL", "TOTAL"],
-      ...meses.map((ym): [string, string] => [ym, mesBtnLabel(ym)]),
-    ];
-  }, [data?.meses_disponiveis]);
-
   const r = data?.resumo;
 
   return (
@@ -162,9 +115,10 @@ function NeutraInner() {
             </a>
           </div>
           <div className="painel-controls">
-            <MesVisaoSelector
+            <PeriodoVisaoSelector
               value={mes}
-              options={mesOptions}
+              mesesDisponiveis={data?.meses_disponiveis || FALLBACK_MESES}
+              fallbackMeses={FALLBACK_MESES}
               onChange={setMes}
             />
             <button
