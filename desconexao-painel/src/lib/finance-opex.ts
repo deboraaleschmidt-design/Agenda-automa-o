@@ -2,7 +2,7 @@
  * Prévia OPEX + pagamento por quinzena (pedido 17/11/2026).
  * Só leitura; lacunas = sem preço / NÃO INFORMADO — sem inventar zeros.
  */
-import type { APagarLinha } from "./finance-parse";
+import type { APagarLinha, APagarParse } from "./finance-parse";
 import { pagamentoQuinzenaMes, type NeutraReg } from "./neutra-engine";
 import type { IatReg } from "./iat-base-engine";
 import type { EquipeRow } from "./iat-parse";
@@ -253,62 +253,127 @@ export function buildIatQuinzena(
   return { q1: q1.sort(sort), q2: q2.sort(sort) };
 }
 
-/** Desconexão: Valter = A PAGAR; Guilherme CLT; Alexandre sem custo. */
+function displayName(raw: string): string {
+  const s = String(raw || "")
+    .replace(/\bZ\d{5,}\b/gi, "")
+    .replace(/\bSMA\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!s) return "TCI";
+  const u = fold(s);
+  if (u.includes("NAO IDENTIFICADO") || u.includes("OUTROS TCI") || u === "TCI")
+    return "TCI";
+  // Só nome (Title Case); sem matrícula/TT.
+  return s
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+}
+
+function desconexaoLinha(
+  l: APagarLinha,
+  notaOverride?: string,
+): QuinzenaPagLinha {
+  const nome = displayName(l.tecnico);
+  const periodo = l.periodo ? ` · ${l.periodo}` : "";
+  if (isValter(l.tecnico)) {
+    return {
+      tecnico: nome,
+      tipo: "parceiro",
+      atividades: l.volume,
+      valor: l.valor,
+      nota:
+        notaOverride ||
+        `Parceiro · ${l.status || "A PAGAR"}${periodo}`,
+    };
+  }
+  if (isAlexandre(l.tecnico)) {
+    return {
+      tecnico: nome,
+      tipo: "sem_custo",
+      atividades: l.volume,
+      valor: 0,
+      nota: "Login sem custo (produção na receita)",
+    };
+  }
+  // Só Guilherme Becker (CLT Desconexão) — não Guilherme Mauricio (PJ no histórico).
+  if (
+    fold(l.tecnico).includes("GUILHERME") &&
+    (fold(l.tecnico).includes("BECKER") || fold(l.tecnico).includes("SANTOS"))
+  ) {
+    return {
+      tecnico: nome,
+      tipo: "CLT",
+      atividades: l.volume,
+      valor: null,
+      nota: `CLT · R$ ${CLT_SALARIO_PROVISORIO.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês`,
+    };
+  }
+  return {
+    tecnico: nome,
+    tipo: "PJ",
+    atividades: l.volume,
+    valor: l.valor,
+    nota: notaOverride || `${l.status || "A PAGAR"}${periodo}`,
+  };
+}
+
+/**
+ * Desconexão: Valter = parceiro (A PAGAR); Guilherme CLT; Alexandre sem custo.
+ * FECHAMENTO → 1ª; QUINZENA VIGENTE → 2ª quando a planilha marca Q2 (pós-corte).
+ */
 export function buildDesconexaoQuinzena(
-  aPagar: APagarLinha[],
+  pack: APagarParse | APagarLinha[],
   y: number,
   m: number,
 ): { q1: QuinzenaPagLinha[]; q2: QuinzenaPagLinha[] } {
   void y;
   void m;
-  // A PAGAR da planilha = quinzena corrente (espelho); colocamos na 1ª se dia≤15 senão 2ª — sem data na aba, vai para ambas como referência única na 1ª com nota.
-  const linhas: QuinzenaPagLinha[] = aPagar.map((l) => {
-    if (isValter(l.tecnico)) {
-      return {
-        tecnico: displayName(l.tecnico),
-        tipo: "parceiro" as const,
-        atividades: l.volume,
-        valor: l.valor,
-        nota: "Parceiro · A PAGAR (planilha)",
-      };
-    }
-    if (isAlexandre(l.tecnico)) {
-      return {
-        tecnico: displayName(l.tecnico),
-        tipo: "sem_custo" as const,
-        atividades: l.volume,
-        valor: 0,
-        nota: "Login sem custo (produção na receita)",
-      };
-    }
-    if (fold(l.tecnico).includes("GUILHERME")) {
-      return {
-        tecnico: displayName(l.tecnico),
-        tipo: "CLT" as const,
-        atividades: l.volume,
-        valor: null,
-        nota: `CLT · R$ ${CLT_SALARIO_PROVISORIO.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês`,
-      };
-    }
-    return {
-      tecnico: displayName(l.tecnico),
-      tipo: "PJ" as const,
-      atividades: l.volume,
-      valor: l.valor,
-      nota: l.status || "A PAGAR",
-    };
-  });
-  // Espelho único na 1ª (fonte = quinzena da planilha); 2ª vazia até haver histórico.
-  return { q1: linhas, q2: [] };
-}
+  const parsed: APagarParse = Array.isArray(pack)
+    ? {
+        titulo: "",
+        quinzena: null,
+        linhas: pack,
+        vigente: [],
+        fechamento: [],
+        em_atraso: [],
+        total: pack.reduce((s, l) => s + l.valor, 0),
+        total_fechamento: 0,
+        total_atraso: 0,
+      }
+    : pack;
 
-function displayName(raw: string): string {
-  const s = String(raw || "").trim();
-  if (!s) return "TCI";
-  const u = fold(s);
-  if (u.includes("NAO IDENTIFICADO") || u.includes("OUTROS TCI") || u === "TCI")
-    return "TCI";
-  return s;
+  const q1: QuinzenaPagLinha[] = [];
+  const q2: QuinzenaPagLinha[] = [];
+
+  const multi =
+    parsed.fechamento.length > 0 ||
+    parsed.vigente.length > 0 ||
+    parsed.em_atraso.length > 0;
+
+  if (multi) {
+    for (const l of parsed.fechamento) {
+      q1.push(
+        desconexaoLinha(
+          l,
+          `${l.status || "fechamento"}${l.periodo ? ` · ${l.periodo}` : ""}`,
+        ),
+      );
+    }
+    const destVigente = parsed.quinzena === 2 ? q2 : q1;
+    for (const l of parsed.vigente) {
+      destVigente.push(desconexaoLinha(l));
+    }
+    // Em atraso = saldo do fechamento ainda sem PAGO — não duplica valor na Q1
+    // (já está no fechamento); só reforça nota se Valter parcial não listado.
+    return { q1, q2 };
+  }
+
+  // Layout legado: um bloco → quinzena detectada no título, senão 1ª.
+  const dest = parsed.quinzena === 2 ? q2 : q1;
+  for (const l of parsed.linhas) {
+    dest.push(desconexaoLinha(l));
+  }
+  return { q1, q2 };
 }
 
 function wrapQuinzenas(
@@ -433,7 +498,7 @@ export function buildFinanceOpex(opts: {
   mes: string;
   receita: number;
   semPreco: number;
-  aPagar: APagarLinha[];
+  aPagar: APagarLinha[] | APagarParse;
   iatRegs: IatReg[];
   iatEquipe: EquipeRow[];
   neutraRegs: NeutraReg[];
@@ -501,7 +566,10 @@ export function buildFinanceOpex(opts: {
   }
 
   if (opts.segmento === "desconexao" || opts.segmento === "todos") {
-    const d = buildDesconexaoQuinzena(opts.aPagar, y, m);
+    const pack = Array.isArray(opts.aPagar)
+      ? opts.aPagar
+      : opts.aPagar;
+    const d = buildDesconexaoQuinzena(pack, y, m);
     if (opts.segmento === "desconexao") {
       q1 = d.q1;
       q2 = d.q2;

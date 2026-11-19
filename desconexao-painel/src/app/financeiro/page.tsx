@@ -622,37 +622,128 @@ function FinanceiroInner() {
           ) : null}
 
           {showDes ? (
-            <section className="painel-block">
+            <section className="painel-block" aria-labelledby="recolhas-aberto-title">
               <div className="painel-block-head">
-                <h2>A pagar · Desconexão (espelho planilha)</h2>
-                <span>{data?.quinzena_titulo || "Quinzena"}</span>
+                <h2 id="recolhas-aberto-title">
+                  Recolhas a pagar (em aberto)
+                </h2>
+                <span>
+                  {data?.recolhas_aberto?.titulo ||
+                    data?.quinzena_titulo ||
+                    "PAINEL RECOLHAS"}
+                </span>
+              </div>
+              <div className="neutra-pay-legend">
+                <p>
+                  Pendente = quinzena vigente + fechadas em atraso · Fechado/pago
+                  = fechamento até o corte (planilha).
+                </p>
+              </div>
+              <div className="painel-block-head" style={{ background: "transparent" }}>
+                <h2 style={{ fontSize: "1.05rem" }}>Pendente</h2>
+                <span>
+                  {(data?.recolhas_aberto?.pendentes || data?.a_pagar || []).length}{" "}
+                  linha(s)
+                </span>
               </div>
               <div className="table-wrap">
                 <table className="data">
                   <thead>
                     <tr>
                       <th>Técnico</th>
-                      <th>Vol.</th>
+                      <th>Recolhas</th>
                       <th>Unit.</th>
                       <th>A pagar</th>
                       <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(data?.a_pagar || []).map((l) => (
-                      <tr key={l.tecnico}>
-                        <td>{l.tecnico}</td>
-                        <td>{l.volume}</td>
-                        <td>{moneyBr(l.unitario)}</td>
-                        <td>{moneyBr(l.valor)}</td>
-                        <td>{l.status}</td>
+                    {(data?.recolhas_aberto?.pendentes || data?.a_pagar || [])
+                      .length === 0 ? (
+                      <tr>
+                        <td colSpan={5}>Nenhuma recolha pendente.</td>
                       </tr>
-                    ))}
+                    ) : (
+                      (data?.recolhas_aberto?.pendentes || data?.a_pagar || []).map(
+                        (l, i) => (
+                          <tr key={`pend-${l.tecnico}-${i}`}>
+                            <td>{l.tecnico}</td>
+                            <td>{l.volume}</td>
+                            <td>{moneyBr(l.unitario)}</td>
+                            <td>{moneyBr(l.valor)}</td>
+                            <td className="sub">
+                              {l.status}
+                              {l.periodo ? ` · ${l.periodo}` : ""}
+                            </td>
+                          </tr>
+                        ),
+                      )
+                    )}
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colSpan={3}>TOTAL</td>
-                      <td>{moneyBr(data?.total_a_pagar ?? 0)}</td>
+                      <td colSpan={3}>TOTAL pendente</td>
+                      <td>
+                        {moneyBr(
+                          (data?.recolhas_aberto?.pendentes || data?.a_pagar || []).reduce(
+                            (s, l) => s + (l.valor || 0),
+                            0,
+                          ),
+                        )}
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <div className="painel-block-head" style={{ background: "transparent" }}>
+                <h2 style={{ fontSize: "1.05rem" }}>Fechado / pago</h2>
+                <span>
+                  {(data?.recolhas_aberto?.fechados || []).length} linha(s)
+                </span>
+              </div>
+              <div className="table-wrap">
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>Técnico</th>
+                      <th>Recolhas</th>
+                      <th>Unit.</th>
+                      <th>Total</th>
+                      <th>Situação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.recolhas_aberto?.fechados || []).length === 0 ? (
+                      <tr>
+                        <td colSpan={5}>Sem fechamento neste espelho.</td>
+                      </tr>
+                    ) : (
+                      (data?.recolhas_aberto?.fechados || []).map((l, i) => (
+                        <tr key={`fech-${l.tecnico}-${i}`}>
+                          <td>{l.tecnico}</td>
+                          <td>{l.volume}</td>
+                          <td>{moneyBr(l.unitario)}</td>
+                          <td>{moneyBr(l.valor)}</td>
+                          <td className="sub">
+                            {l.status}
+                            {l.periodo ? ` · ${l.periodo}` : ""}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={3}>TOTAL fechamento</td>
+                      <td>
+                        {moneyBr(
+                          (data?.recolhas_aberto?.fechados || []).reduce(
+                            (s, l) => s + (l.valor || 0),
+                            0,
+                          ),
+                        )}
+                      </td>
                       <td />
                     </tr>
                   </tfoot>
