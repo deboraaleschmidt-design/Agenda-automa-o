@@ -269,13 +269,16 @@ export function parseBaseNeutraRegs(
     if (e.tr) byTr.set(fold(e.tr), e);
   }
 
-  // 1 linha por Número SA (última ocorrência na base)
+  // 1 linha por Número SA — 1ª ocorrência vence (PROMPT > HIST > BASE).
   const bySa = new Map<string, NeutraReg>();
   let meshVazio = true;
 
   for (let i = 1; i < baseRows.length; i++) {
     const row = baseRows[i] || [];
     if (!row.some((x) => x !== "" && x != null)) continue;
+    const sa = fold(row[c.sa]);
+    if (!sa || bySa.has(sa)) continue;
+
     const estadoRaw = fold(row[c.estado]);
     let estado: "produtiva" | "improdutiva" | null = null;
     if (estadoRaw === "CONCLUIDO COM SUCESSO") estado = "produtiva";
@@ -300,8 +303,6 @@ export function parseBaseNeutraRegs(
       continue;
     }
 
-    const sa = fold(row[c.sa]);
-    if (!sa) continue;
     const macro = c.macro != null ? fold(row[c.macro]) : "";
     const tipoTrab = c.tipoTrab != null ? row[c.tipoTrab] : "";
     if (txt(tipoTrab)) meshVazio = false;
@@ -345,10 +346,18 @@ function resolveRange(
   mes: string,
   maxKey: string,
 ): { start: string; end: string } {
-  if (mes.trim().toUpperCase() === "TOTAL") {
+  const raw = mes.trim();
+  if (raw.toUpperCase() === "TOTAL") {
     return { start: "2000-01-01", end: maxKey || "2099-12-31" };
   }
-  const [ys, ms] = mes.trim().split("-");
+  // Ano inteiro YYYY
+  if (/^\d{4}$/.test(raw)) {
+    const y = Number(raw);
+    let end = `${y}-12-31`;
+    if (end > maxKey) end = maxKey;
+    return { start: `${y}-01-01`, end };
+  }
+  const [ys, ms] = raw.split("-");
   const y = Number(ys);
   const m = Number(ms);
   const start = `${y}-${pad(m)}-01`;
@@ -750,10 +759,12 @@ export function buildNeutraFromBase(opts: {
   const mesLabel =
     mesReq.toUpperCase() === "TOTAL"
       ? "TOTAL"
-      : (() => {
-          const [y, m] = mesReq.split("-");
-          return `${pad(Number(m))}/${y}`;
-        })();
+      : /^\d{4}$/.test(mesReq)
+        ? `TOTAL ${mesReq}`
+        : (() => {
+            const [y, m] = mesReq.split("-");
+            return `${pad(Number(m))}/${y}`;
+          })();
 
   const equipeByTt = new Map<string, NeutraEquipeRow>();
   for (const e of equipe) {

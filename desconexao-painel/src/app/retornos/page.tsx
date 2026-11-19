@@ -2,29 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AuthGate from "../../components/AuthGate";
-import MesVisaoSelector from "../../components/MesVisaoSelector";
+import PeriodoVisaoSelector from "../../components/PeriodoVisaoSelector";
+import { downloadCsv, rowsToCsv } from "../../lib/export-csv";
+import { labelPeriodo, ymFromBrDate, ymMatchesPeriodo } from "../../lib/periodo";
 import type { RetornoLinha, RetornosPayload } from "../../lib/retornos-parse";
 
-const MES_OPTIONS: Array<[string, string]> = [
-  ["TOTAL", "TOTAL"],
-  ["2026-09", "SET"],
-  ["2026-10", "OUT"],
-  ["2026-11", "NOV"],
-];
-
-function mesFromDataRetorno(dataRetorno: string): string | null {
-  // "10/11/26 11:51" ou "10/11/2026"
-  const m = dataRetorno.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-  if (!m) return null;
-  let y = Number(m[3]);
-  if (y < 100) y += 2000;
-  const mo = Number(m[2]);
-  return `${y}-${String(mo).padStart(2, "0")}`;
-}
+const FALLBACK_MESES = ["2026-09", "2026-10", "2026-11"];
 
 function filterByMes(lines: RetornoLinha[], mes: string): RetornoLinha[] {
-  if (mes.trim().toUpperCase() === "TOTAL") return lines;
-  return lines.filter((l) => mesFromDataRetorno(l.data_retorno) === mes);
+  return lines.filter((l) => {
+    const ym = ymFromBrDate(l.data_retorno);
+    if (!ym) return mes.trim().toUpperCase() === "TOTAL";
+    return ymMatchesPeriodo(ym, mes);
+  });
 }
 
 function RetornosInner() {
@@ -120,11 +110,47 @@ function RetornosInner() {
             </a>
           </div>
           <div className="painel-controls">
-            <MesVisaoSelector
+            <PeriodoVisaoSelector
               value={mes}
-              options={MES_OPTIONS}
+              mesesDisponiveis={data?.meses_disponiveis || FALLBACK_MESES}
+              fallbackMeses={FALLBACK_MESES}
               onChange={setMes}
             />
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
+              disabled={!data}
+              onClick={() => {
+                const lines = [...com, ...sem];
+                const csv = rowsToCsv(
+                  [
+                    "contrato",
+                    "n_retorno",
+                    "data_pai",
+                    "tecnico_pai",
+                    "data_retorno",
+                    "atendimento",
+                    "tecnico_atendeu",
+                    "fechamento",
+                    "grupo",
+                  ],
+                  lines.map((l) => [
+                    l.contrato,
+                    l.n_retorno,
+                    l.data_pai,
+                    l.tecnico_pai,
+                    l.data_retorno,
+                    l.data_hora_atendimento,
+                    l.tecnico_atendeu,
+                    l.fechamento,
+                    l.grupo,
+                  ]),
+                );
+                downloadCsv(`retornos-${mes}.csv`, csv);
+              }}
+            >
+              Exportar CSV
+            </button>
             <button
               className="btn btn-primary btn-sm"
               type="button"
@@ -144,7 +170,7 @@ function RetornosInner() {
               <p className="ops-kicker">
                 Leitura só · substitui Retorno Credenciada
               </p>
-              <h1 className="ops-title">Retornos</h1>
+              <h1 className="ops-title">{labelPeriodo(mes)}</h1>
               <p className="ops-sub">{data?.titulo || "—"}</p>
             </div>
           </div>

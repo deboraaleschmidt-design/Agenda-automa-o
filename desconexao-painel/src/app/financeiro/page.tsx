@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AuthGate from "../../components/AuthGate";
-import MesVisaoSelector from "../../components/MesVisaoSelector";
+import PeriodoVisaoSelector from "../../components/PeriodoVisaoSelector";
 import type {
   FinancePayload,
   FinanceSegmento,
 } from "../../lib/finance-parse";
+import { downloadCsv, rowsToCsv } from "../../lib/export-csv";
+import { labelPeriodo } from "../../lib/periodo";
 
 function moneyBr(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "sem preço";
@@ -24,38 +26,11 @@ function pctBr(n: number | null | undefined): string {
   })}%`;
 }
 
-function mesBtnLabel(ym: string): string {
-  const [y, m] = ym.split("-");
-  const short = [
-    "",
-    "Jan",
-    "Fev",
-    "Mar",
-    "Abr",
-    "Mai",
-    "Jun",
-    "Jul",
-    "Ago",
-    "Set",
-    "Out",
-    "Nov",
-    "Dez",
-  ];
-  return `${short[Number(m)] || m}/${y}`;
-}
+const FALLBACK_MESES = ["2026-08", "2026-09", "2026-10", "2026-11"];
 
 function monthLabel(mes: string): string {
-  if (mes.trim().toUpperCase() === "TOTAL") return "TOTAL · período";
-  return mesBtnLabel(mes);
+  return labelPeriodo(mes);
 }
-
-const MES_FALLBACK: Array<[string, string]> = [
-  ["TOTAL", "TOTAL"],
-  ["2026-08", "Ago/2026"],
-  ["2026-09", "Set/2026"],
-  ["2026-10", "Out/2026"],
-  ["2026-11", "Nov/2026"],
-];
 
 const SETOR_BTNS: Array<[FinanceSegmento, string]> = [
   ["desconexao", "DESCONEXÃO"],
@@ -125,15 +100,6 @@ function FinanceiroInner() {
     void load(mes, segmento, true);
   }, [load, mes, segmento, ready]);
 
-  const mesOptions = useMemo((): Array<[string, string]> => {
-    const meses = data?.meses_disponiveis || [];
-    if (!meses.length) return MES_FALLBACK;
-    return [
-      ["TOTAL", "TOTAL"],
-      ...meses.map((ym): [string, string] => [ym, mesBtnLabel(ym)]),
-    ];
-  }, [data?.meses_disponiveis]);
-
   const sub =
     segmento === "desconexao"
       ? data?.subtotais.desconexao
@@ -194,11 +160,43 @@ function FinanceiroInner() {
                 ))}
               </div>
             </div>
-            <MesVisaoSelector
+            <PeriodoVisaoSelector
               value={mes}
-              options={mesOptions}
+              mesesDisponiveis={data?.meses_disponiveis || FALLBACK_MESES}
+              fallbackMeses={FALLBACK_MESES}
               onChange={setMes}
             />
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
+              disabled={!data}
+              onClick={() => {
+                const lines = data?.atividades || [];
+                const csv = rowsToCsv(
+                  [
+                    "segmento",
+                    "codigo",
+                    "descricao",
+                    "quantidade",
+                    "preco_unitario",
+                    "valor",
+                    "sem_preco",
+                  ],
+                  lines.map((l) => [
+                    l.segmento,
+                    l.codigo,
+                    l.descricao,
+                    l.quantidade,
+                    l.preco_unitario ?? "",
+                    l.valor ?? "",
+                    l.sem_preco ? "sim" : "",
+                  ]),
+                );
+                downloadCsv(`financeiro-${segmento}-${mes}.csv`, csv);
+              }}
+            >
+              Exportar CSV
+            </button>
             <button
               className="btn btn-primary btn-sm"
               type="button"
@@ -597,7 +595,6 @@ function FinanceiroInner() {
                   <thead>
                     <tr>
                       <th>Técnico</th>
-                      <th>TT</th>
                       <th>Área</th>
                       <th>Serviços OK</th>
                       <th>A faturar</th>
@@ -606,13 +603,12 @@ function FinanceiroInner() {
                   <tbody>
                     {(data?.ok_tci_tecnicos || []).length === 0 ? (
                       <tr>
-                        <td colSpan={5}>Sem OK TCI no período.</td>
+                        <td colSpan={4}>Sem OK TCI no período.</td>
                       </tr>
                     ) : (
                       (data?.ok_tci_tecnicos || []).map((t) => (
-                        <tr key={t.tt}>
+                        <tr key={t.tt || t.nome}>
                           <td>{t.nome}</td>
-                          <td>{t.tt}</td>
                           <td>{t.area}</td>
                           <td>{t.servicos_ok}</td>
                           <td>{moneyBr(t.valor)}</td>

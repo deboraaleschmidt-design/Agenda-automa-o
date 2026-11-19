@@ -30,7 +30,7 @@ export async function syncHistTecnico(): Promise<HistTecnicoPayload> {
       periodo_nota: parsed.periodo_nota,
       ordem_nota: parsed.ordem_nota,
       cards: parsed.cards,
-      meses_disponiveis: ["TOTAL", "2026-09", "2026-10", "2026-11"],
+      meses_disponiveis: ["2026-09", "2026-10", "2026-11"],
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

@@ -1,4 +1,5 @@
 import { requirePainelToken } from "../../../lib/auth";
+import { syncBancoFromSheets } from "../../../lib/banco-sync";
 import { clientKey, rateLimit } from "../../../lib/rate-limit";
 import { ensureSeed } from "../../../lib/seed";
 import { isMesOrTotal } from "../../../lib/painel-parse";
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
 
   await ensureSeed(mes);
   const result = await syncPainelSnapshot(mes);
+  const banco = await syncBancoFromSheets({ trigger: "button" });
 
   // Safe shape only — never echo secret content. V2 env only.
   const creds = classifyServiceAccountJson(readServiceAccountJsonEnv());
@@ -65,6 +67,7 @@ export async function POST(request: Request) {
     fonte: result.payload.fonte,
     atualizado_em: result.payload.atualizado_em,
     mensagem: result.payload.mensagem,
+    banco,
     credsShape: creds.shape,
     credsStartsWithBrace: creds.startsWithBrace,
     credsLengthClass: creds.lengthClass,

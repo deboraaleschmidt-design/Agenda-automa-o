@@ -205,6 +205,6 @@ export function emptyRetornosPayload(mensagem?: string): RetornosPayload {
     ofensor_atendeu: [],
     com_historico: [],
     sem_historico: [],
-    meses_disponiveis: ["TOTAL", "2026-09", "2026-10", "2026-11"],
+    meses_disponiveis: ["2026-09", "2026-10", "2026-11"],
   };
 }

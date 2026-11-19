@@ -29,6 +29,9 @@ export default function HomePage() {
           <Link className="btn btn-ghost" href="/financeiro">
             Financeiro
           </Link>
+          <Link className="btn btn-ghost" href="/banco">
+            Banco
+          </Link>
         </div>
       </div>
     </main>

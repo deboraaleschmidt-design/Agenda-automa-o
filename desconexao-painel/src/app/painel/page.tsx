@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import MesVisaoSelector from "../../components/MesVisaoSelector";
+import PeriodoVisaoSelector from "../../components/PeriodoVisaoSelector";
+import { labelPeriodo } from "../../lib/periodo";
 import type { PainelPayload } from "../../lib/types";
 
 function currentMes(): string {
@@ -18,28 +19,12 @@ function pctLabel(n: number): string {
 }
 
 function monthLabel(mes: string): string {
-  if (mes.trim().toUpperCase() === "TOTAL") return "TOTAL · período completo";
-  const [y, m] = mes.split("-");
-  const names = [
-    "",
-    "Janeiro",
-    "Fevereiro",
-    "Março",
-    "Abril",
-    "Maio",
-    "Junho",
-    "Julho",
-    "Agosto",
-    "Setembro",
-    "Outubro",
-    "Novembro",
-    "Dezembro",
-  ];
-  return `${names[Number(m)] || m} ${y}`;
+  return labelPeriodo(mes);
 }
 
 function monthKeyFromMes(mes: string): string | null {
   if (mes.trim().toUpperCase() === "TOTAL") return null;
+  if (/^\d{4}$/.test(mes.trim())) return null;
   const m = Number(mes.split("-")[1]);
   const keys = [
     "JAN",
@@ -58,32 +43,11 @@ function monthKeyFromMes(mes: string): string | null {
   return keys[m - 1] || null;
 }
 
-const MES_OPTIONS: Array<[string, string]> = [
-  ["TOTAL", "TOTAL"],
-  ["2025-01", "Jan/2025"],
-  ["2025-02", "Fev/2025"],
-  ["2025-03", "Mar/2025"],
-  ["2025-04", "Abr/2025"],
-  ["2025-05", "Mai/2025"],
-  ["2025-06", "Jun/2025"],
-  ["2025-07", "Jul/2025"],
-  ["2025-08", "Ago/2025"],
-  ["2025-09", "Set/2025"],
-  ["2025-10", "Out/2025"],
-  ["2025-11", "Nov/2025"],
-  ["2025-12", "Dez/2025"],
-  ["2026-01", "Jan/2026"],
-  ["2026-02", "Fev/2026"],
-  ["2026-03", "Mar/2026"],
-  ["2026-04", "Abr/2026"],
-  ["2026-05", "Mai/2026"],
-  ["2026-06", "Jun/2026"],
-  ["2026-07", "Jul/2026"],
-  ["2026-08", "Ago/2026"],
-  ["2026-09", "Set/2026"],
-  ["2026-10", "Out/2026"],
-  ["2026-11", "Nov/2026"],
-  ["2026-12", "Dez/2026"],
+const FALLBACK_MESES = [
+  "2025-01","2025-02","2025-03","2025-04","2025-05","2025-06",
+  "2025-07","2025-08","2025-09","2025-10","2025-11","2025-12",
+  "2026-01","2026-02","2026-03","2026-04","2026-05","2026-06",
+  "2026-07","2026-08","2026-09","2026-10","2026-11","2026-12",
 ];
 
 export default function PainelPage() {
@@ -329,9 +293,9 @@ export default function PainelPage() {
             </a>
           </div>
           <div className="painel-controls">
-            <MesVisaoSelector
+            <PeriodoVisaoSelector
               value={mes}
-              options={MES_OPTIONS}
+              fallbackMeses={FALLBACK_MESES}
               onChange={setMes}
             />
             <button

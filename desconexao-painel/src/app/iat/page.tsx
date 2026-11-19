@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AuthGate from "../../components/AuthGate";
-import MesVisaoSelector from "../../components/MesVisaoSelector";
+import PeriodoVisaoSelector from "../../components/PeriodoVisaoSelector";
 import {
   filterIatBlocks,
   type IatBase,
   type IatPayload,
 } from "../../lib/iat-parse";
+import { labelPeriodo } from "../../lib/periodo";
 
 function pct(n: number): string {
   return `${(Math.round(n * 1000) / 10).toLocaleString("pt-BR", {
@@ -16,56 +17,14 @@ function pct(n: number): string {
   })}%`;
 }
 
-const MES_NAMES = [
-  "",
-  "Janeiro",
-  "Fevereiro",
-  "Março",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
-];
+const FALLBACK_MESES = ["2026-09", "2026-10", "2026-11"];
 
 function monthLabel(mes: string): string {
   if (mes.trim().toUpperCase() === "TOTAL")
     return "TOTAL · BASE IAT (desde 22/09)";
-  const [y, m] = mes.split("-");
-  return `${MES_NAMES[Number(m)] || m} ${y}`;
+  if (/^\d{4}$/.test(mes.trim())) return `TOTAL · ${mes.trim()}`;
+  return labelPeriodo(mes);
 }
-
-function mesBtnLabel(ym: string): string {
-  const [y, m] = ym.split("-");
-  const short = [
-    "",
-    "Jan",
-    "Fev",
-    "Mar",
-    "Abr",
-    "Mai",
-    "Jun",
-    "Jul",
-    "Ago",
-    "Set",
-    "Out",
-    "Nov",
-    "Dez",
-  ];
-  return `${short[Number(m)] || m}/${y}`;
-}
-
-/** Fallback até a API trazer meses_disponiveis da BASE. */
-const MES_FALLBACK: Array<[string, string]> = [
-  ["TOTAL", "TOTAL"],
-  ["2026-09", "SET"],
-  ["2026-10", "OUT"],
-  ["2026-11", "NOV"],
-];
 
 function IatInner() {
   const [data, setData] = useState<IatPayload | null>(null);
@@ -138,15 +97,6 @@ function IatInner() {
   }, [data, base]);
   const maxRank = Math.max(1, ...ranking.map((r) => r.produtivas));
 
-  const mesOptions = useMemo((): Array<[string, string]> => {
-    const meses = data?.meses_disponiveis || [];
-    if (!meses.length) return MES_FALLBACK;
-    return [
-      ["TOTAL", "TOTAL"],
-      ...meses.map((ym): [string, string] => [ym, mesBtnLabel(ym)]),
-    ];
-  }, [data?.meses_disponiveis]);
-
   const ok = data?.painel_ok.resumo;
   const okTechs = (data?.painel_ok.tecnicos || []).filter((t) =>
     base === "TOTAL" ? true : t.base === base || (base === "PORTO ALEGRE" && t.base.includes("PORTO")),
@@ -185,9 +135,10 @@ function IatInner() {
             </a>
           </div>
           <div className="painel-controls">
-            <MesVisaoSelector
+            <PeriodoVisaoSelector
               value={mes}
-              options={mesOptions}
+              mesesDisponiveis={data?.meses_disponiveis || FALLBACK_MESES}
+              fallbackMeses={FALLBACK_MESES}
               onChange={setMes}
             />
             <label className="field-month">
@@ -593,12 +544,9 @@ function IatInner() {
                     </thead>
                     <tbody>
                       {okTechs.map((t) => (
-                        <tr key={`${t.base}-${t.login}`}>
+                        <tr key={`${t.base}-${t.login || t.tecnico}`}>
                           <td>{t.pos}</td>
-                          <td>
-                            {t.tecnico}
-                            <span className="sub"> {t.login}</span>
-                          </td>
+                          <td>{t.tecnico}</td>
                           <td>{t.base}</td>
                           <td>{t.vinculo}</td>
                           <td>{t.contratos_ok}</td>
