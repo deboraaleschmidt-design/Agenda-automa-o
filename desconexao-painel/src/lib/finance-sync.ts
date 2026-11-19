@@ -397,13 +397,21 @@ function buildNeutraAtividades(
   const maxKey = regs.reduce((m, r) => (r.dt.key > m ? r.dt.key : m), "");
   let start = "2000-01-01";
   let end = maxKey || "2099-12-31";
-  if (mes.trim().toUpperCase() !== "TOTAL") {
-    const [ys, ms] = mes.trim().split("-");
-    const y = Number(ys);
-    const m = Number(ms);
-    start = `${y}-${pad(m)}-01`;
-    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
-    end = `${y}-${pad(m)}-${pad(lastDay)}`;
+  const rawMes = mes.trim();
+  if (rawMes.toUpperCase() !== "TOTAL") {
+    // Ano YYYY (seletor #15) ou mês YYYY-MM — HIST alimenta SET/OUT.
+    if (/^\d{4}$/.test(rawMes)) {
+      const y = Number(rawMes);
+      start = `${y}-01-01`;
+      end = `${y}-12-31`;
+    } else {
+      const [ys, ms] = rawMes.split("-");
+      const y = Number(ys);
+      const m = Number(ms);
+      start = `${y}-${pad(m)}-01`;
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      end = `${y}-${pad(m)}-${pad(lastDay)}`;
+    }
     if (maxKey && end > maxKey) end = maxKey;
   }
 
@@ -709,10 +717,15 @@ export async function syncFinanceiro(opts?: {
             "Neutra: GOOGLE_SHEETS_NEUTRA_ID / GOOGLE_SHEETS_D1_ID não configurado (sem id fixo no código).",
           ],
         };
-    if (SPREADSHEET_NEUTRA_ID && !neutraMerged.histPresente) {
-      neutraParseAvisos.push(
-        "Neutra: BASE NEUTRA HIST ausente — SET/OUT via PROMPT+BASE.",
+    if (SPREADSHEET_NEUTRA_ID) {
+      neutraParseAvisos.unshift(
+        `Neutra Fin: ${neutraMerged.fontes.join(" → ") || "—"} · dedupe SA 1ª ocorrência (PROMPT > HIST > BASE).`,
       );
+      if (!neutraMerged.histPresente) {
+        neutraParseAvisos.push(
+          "Neutra: BASE NEUTRA HIST ausente — SET/OUT podem ficar zerados se só BASE (nov) estiver disponível.",
+        );
+      }
     }
     const neutra = buildNeutraAtividades(neutraRegs, mes, {
       comDrop: lpuNeutra.comDrop,

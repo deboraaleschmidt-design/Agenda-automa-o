@@ -595,7 +595,6 @@ function FinanceiroInner() {
                   <thead>
                     <tr>
                       <th>Técnico</th>
-                      <th>TT</th>
                       <th>Área</th>
                       <th>Serviços OK</th>
                       <th>A faturar</th>
@@ -604,13 +603,12 @@ function FinanceiroInner() {
                   <tbody>
                     {(data?.ok_tci_tecnicos || []).length === 0 ? (
                       <tr>
-                        <td colSpan={5}>Sem OK TCI no período.</td>
+                        <td colSpan={4}>Sem OK TCI no período.</td>
                       </tr>
                     ) : (
                       (data?.ok_tci_tecnicos || []).map((t) => (
-                        <tr key={t.tt}>
+                        <tr key={t.tt || t.nome}>
                           <td>{t.nome}</td>
-                          <td>{t.tt}</td>
                           <td>{t.area}</td>
                           <td>{t.servicos_ok}</td>
                           <td>{moneyBr(t.valor)}</td>

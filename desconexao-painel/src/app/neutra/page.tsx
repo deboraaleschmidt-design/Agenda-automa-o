@@ -372,7 +372,7 @@ function NeutraInner() {
             <div className="painel-block-head">
               <h2 id="tab-neutra">Produção por técnico</h2>
               <span>
-                nome · TT · área · {(data?.tecnicos || []).length} linha(s)
+                nome · área · {(data?.tecnicos || []).length} linha(s)
               </span>
             </div>
             <div className="table-wrap">
@@ -380,7 +380,6 @@ function NeutraInner() {
                 <thead>
                   <tr>
                     <th>Técnico</th>
-                    <th>TT</th>
                     <th>Área</th>
                     <th>Produtivas</th>
                     <th>Improdutivas</th>
@@ -400,13 +399,12 @@ function NeutraInner() {
                 <tbody>
                   {(data?.tecnicos || []).length === 0 ? (
                     <tr>
-                      <td colSpan={16}>Sem técnicos com produção no período.</td>
+                      <td colSpan={15}>Sem técnicos com produção no período.</td>
                     </tr>
                   ) : (
                     (data?.tecnicos || []).map((t) => (
-                      <tr key={t.tt}>
+                      <tr key={t.tt || t.nome}>
                         <td>{t.nome}</td>
-                        <td>{t.tt}</td>
                         <td>{t.area}</td>
                         <td>{t.produtivas}</td>
                         <td className="cell-improd">{t.improdutivas}</td>

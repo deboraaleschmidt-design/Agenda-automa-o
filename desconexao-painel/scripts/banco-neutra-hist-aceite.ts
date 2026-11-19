@@ -106,13 +106,10 @@ async function main() {
           `${label} ${mes} concl=${exp} (1012/401) got ${got} (${built.resumo.produtivas}/${built.resumo.improdutivas})`,
         );
         const vd = built.visao_dia;
-        const col17 = vd?.cols?.find((c) => c.dia === 17 || c.label?.includes("17"));
         // soma produtivas do dia 17 na visão
         let dia17 = 0;
         if (vd) {
-          const idx = vd.cols.findIndex(
-            (c) => Number(c.dia) === 17 || String(c.label || "") === "17",
-          );
+          const idx = vd.cols.findIndex((c) => Number(c.dia) === 17);
           if (idx >= 0) {
             for (const row of vd.rows) {
               dia17 += Number(row.por_dia?.[idx] || 0);

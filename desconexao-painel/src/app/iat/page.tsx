@@ -544,12 +544,9 @@ function IatInner() {
                     </thead>
                     <tbody>
                       {okTechs.map((t) => (
-                        <tr key={`${t.base}-${t.login}`}>
+                        <tr key={`${t.base}-${t.login || t.tecnico}`}>
                           <td>{t.pos}</td>
-                          <td>
-                            {t.tecnico}
-                            <span className="sub"> {t.login}</span>
-                          </td>
+                          <td>{t.tecnico}</td>
                           <td>{t.base}</td>
                           <td>{t.vinculo}</td>
                           <td>{t.contratos_ok}</td>
