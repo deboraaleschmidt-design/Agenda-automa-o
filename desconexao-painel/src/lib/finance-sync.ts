@@ -1,8 +1,10 @@
 import {
   emptyFinancePayload,
   filterFaturamentoPorMes,
+  historicoToAPagarParse,
   parseAPagar,
   parseFaturamento,
+  parseHistoricoRecolhas,
   type FinanceAtividade,
   type FinancePayload,
   type FinanceSegmento,
@@ -630,9 +632,11 @@ export async function syncFinanceiro(opts?: {
       auth.sheets.spreadsheets.values.batchGet({
         spreadsheetId: SPREADSHEET_ID,
         ranges: [
-          "'PAINEL RECOLHAS'!A1:E40",
+          "'PAINEL RECOLHAS'!A1:H80",
           SHEET_FATURAR,
           "'Respostas ao formulário 1'!A1:S",
+          // Fonte canônica Fin Desconexão (espelho; desde 01/09/2026)
+          "'HISTÓRICO RECOLHAS'!A1:I120",
         ],
         valueRenderOption: "FORMATTED_VALUE",
       }),
@@ -665,6 +669,7 @@ export async function syncFinanceiro(opts?: {
     const recolhas = desRanges[0]?.values || [];
     const faturar = desRanges[1]?.values || [];
     const respostas = desRanges[2]?.values || [];
+    const historicoRows = desRanges[3]?.values || [];
 
     const d1Ranges = d1Res.data.valueRanges || [];
     const baseRows = d1Ranges[0]?.values || [];
@@ -695,7 +700,26 @@ export async function syncFinanceiro(opts?: {
     const lpuIat = parseLpuIat(lpuRanges[1]?.values || []);
     const lpuNeutra = parseLpuTelemont1(lpuRanges[2]?.values || []);
 
-    const pagar = parseAPagar(recolhas);
+    const hist = parseHistoricoRecolhas(historicoRows);
+    // Canônico: HISTÓRICO RECOLHAS. Fallback PAINEL RECOLHAS só se a aba vier vazia.
+    const pagar =
+      hist.meses.length > 0
+        ? historicoToAPagarParse(hist, mes)
+        : parseAPagar(recolhas);
+    /** Só nomes na UI — sem matrícula/TT. */
+    const nomeSo = (raw: string): string => {
+      const s = String(raw || "")
+        .replace(/\bZ\d{5,}\b/gi, "")
+        .replace(/\bSMA\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!s) return "TCI";
+      return s
+        .toLowerCase()
+        .replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+    };
+    const mapNome = <T extends { tecnico: string }>(rows: T[]): T[] =>
+      rows.map((r) => ({ ...r, tecnico: nomeSo(r.tecnico) }));
     const fat = parseFaturamento(faturar);
     const fatFiltrado = filterFaturamentoPorMes(fat.meses, mes);
 
@@ -769,12 +793,16 @@ export async function syncFinanceiro(opts?: {
         ? `Conferência Faturar (${mes}): ${fatQty} recolhas · ${fatSum.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · LPU Respostas: ${subDes.servicos} · ${subDes.valor_faturar.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`
         : "";
 
+    const histAviso = hist.meses.length
+      ? `Desconexão recolhas: espelho HISTÓRICO RECOLHAS (${hist.titulo || "aba"}).`
+      : "Desconexão recolhas: HISTÓRICO RECOLHAS vazio/ausente — fallback PAINEL RECOLHAS.";
     const duvidas = [
       ...des.avisos,
       ...iat.avisos,
       ...(showNeutra ? neutraParseAvisos : []),
       ...(showNeutra ? neutra.avisos : []),
       ...(fatAviso ? [fatAviso] : []),
+      ...(showDes ? [histAviso] : []),
       ...(promptDays.length
         ? [
             `IAT: PROMPT usado nos dias ausentes na BASE (${promptDays
@@ -785,7 +813,12 @@ export async function syncFinanceiro(opts?: {
       iat.gabrielNota,
     ];
 
-    const meses_disponiveis = mergeMeses(fat.meses, iat.meses, neutra.meses);
+    const histMesesYm = hist.meses.map((h) => h.mes_ym);
+    const meses_disponiveis = mergeMeses(
+      fat.meses,
+      [...iat.meses, ...histMesesYm],
+      neutra.meses,
+    );
 
     const receitaSeg =
       segmento === "desconexao"
@@ -817,12 +850,36 @@ export async function syncFinanceiro(opts?: {
       mes,
       receita: receitaSeg,
       semPreco: semPrecoSeg,
-      aPagar: pagar.linhas,
+      aPagar: pagar,
       iatRegs: regs,
       iatEquipe: eqList,
       neutraRegs,
       neutraEquipeByTt,
     });
+
+    const foldSt = (s: string) =>
+      String(s || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase();
+    const isFechadoPago = (l: { status: string }) => {
+      const st = foldSt(l.status);
+      return (
+        st === "PAGO" ||
+        st.includes("PAGO TUDO") ||
+        st.includes("PARCIAL")
+      );
+    };
+    // Pendente = só status em aberto / fatia não paga (não misturar Q2 já PAGO).
+    const pendentesAberto = mapNome(pagar.em_atraso);
+    const fechadosAberto = mapNome(
+      hist.meses.length
+        ? [...pagar.fechamento, ...pagar.vigente].filter(isFechadoPago)
+        : pagar.fechamento,
+    );
+    const aPagarEspelho = mapNome(
+      pagar.linhas.length ? pagar.linhas : pagar.em_atraso,
+    );
 
     return {
       atualizado_em: new Date().toISOString(),
@@ -857,10 +914,21 @@ export async function syncFinanceiro(opts?: {
       },
       ok_tci_tecnicos: showNeutra ? neutra.okTecnicos : [],
       quinzena_titulo: pagar.titulo,
-      a_pagar: showDes ? pagar.linhas : [],
+      a_pagar: showDes ? aPagarEspelho : [],
       total_a_pagar: showDes ? pagar.total : 0,
       a_pagar_iat_nota:
         `IAT: pagamento PJ R$${PJ_RATE_ATIVIDADE}/OS produtiva (baixa 409) · improdutiva sem pagamento · CLT salário provisório (prévia OPEX).`,
+      recolhas_aberto: showDes
+        ? {
+            titulo: hist.meses.length
+              ? `HISTÓRICO RECOLHAS · ${mes === "TOTAL" ? "desde 01/09" : mes}`
+              : pagar.quinzena === 2
+                ? "2ª quinzena · em aberto pós-corte"
+                : "Recolhas a pagar (em aberto)",
+            pendentes: pendentesAberto,
+            fechados: fechadosAberto,
+          }
+        : null,
       faturamento_meses: fatFiltrado.length ? fatFiltrado : fat.meses,
       faturamento_ago_mais: fat.agoMais,
       pagamento_quinzenas: opexPack.quinzenas,
