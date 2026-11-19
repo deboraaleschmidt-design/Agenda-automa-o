@@ -65,7 +65,7 @@ export async function syncNeutra(mes = "TOTAL"): Promise<NeutraPayload> {
     });
     const avisos = [...(built.avisos || [])];
     avisos.unshift(
-      `Fontes: ${merged.fontes.join(" + ") || "—"} · dedupe Número SA (PROMPT prevalece).`,
+      `Fontes: ${merged.fontes.join(" → ") || "—"} · dedupe SA 1ª ocorrência (PROMPT > HIST > BASE).`,
     );
     if (!merged.histPresente) {
       avisos.push(

@@ -35,4 +35,4 @@ Banco separado / warehouse externo. Fora do escopo do publish-app atual.
 
 ## Neutra histórica
 
-App lê **BASE NEUTRA HIST** (se existir) + **BASE NEUTRA** + **PROMPT NEUTRA**, dedupe por **Número SA** (PROMPT prevalece). Aceite TCI concluídas = produtivas + improdutivas por mês.
+App lê **PROMPT NEUTRA → BASE NEUTRA HIST → BASE NEUTRA**, dedupe por **Número SA** (**1ª ocorrência vence**). Aceite TCI concluídas = produtivas + improdutivas (bate com ou sem PROMPT).

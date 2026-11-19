@@ -24,7 +24,7 @@ Abrir http://127.0.0.1:3000/painel e digitar `dev-local-token` (só quando `PAIN
 - `/iat` — IAT (meses SET+OUT+NOV desde 22/09 + TOTAL)
 - `/historico-tecnico` — cards por técnico (aba HISTÓRICO TÉCNICO)
 - `/retornos` — retornos (aba RETORNOS; substitui Retorno Credenciada)
-- `/neutra` — Neutra (HIST + BASE + PROMPT, dedupe SA; AGO–NOV)
+- `/neutra` — Neutra (PROMPT > HIST > BASE, 1ª SA vence; AGO–NOV)
 - `/financeiro` — Financeiro (Neutra inclui SET/OUT)
 - `/banco` — espelho Postgres (opção A): sync + snapshots mensais
 

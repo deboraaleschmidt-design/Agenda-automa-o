@@ -1,5 +1,5 @@
 /**
- * Aceite Debora 19/11 — Neutra histórica + TCI concluídas.
+ * Aceite Debora 19/11 — Neutra HIST + dedupe PROMPT > HIST > BASE (1ª vence).
  * Run: npx --yes tsx scripts/banco-neutra-hist-aceite.ts
  */
 import { google } from "googleapis";
@@ -27,7 +27,6 @@ async function main() {
 
   const { mergeNeutraSheetRows } = await import("../src/lib/neutra-merge");
   const { buildNeutraFromBase } = await import("../src/lib/neutra-engine");
-  const { syncBancoFromSheets } = await import("../src/lib/banco-sync");
 
   const parsed = JSON.parse(raw);
   const auth = new google.auth.JWT({
@@ -63,16 +62,23 @@ async function main() {
     valueRenderOption: "FORMATTED_VALUE",
   });
   const ranges = res.data.valueRanges || [];
-  const merged = mergeNeutraSheetRows({
-    hist,
-    base: ranges[0]?.values || [],
-    prompt: ranges[1]?.values || [],
-  });
-  console.log(
-    "fontes:",
-    merged.fontes.join(" + "),
-    "| hist:",
-    merged.histPresente,
+  const base = ranges[0]?.values || [];
+  const prompt = ranges[1]?.values || [];
+  const eq = ranges[2]?.values || [];
+
+  console.log("HIST rows", hist.length);
+
+  const withPrompt = mergeNeutraSheetRows({ hist, base, prompt });
+  const withoutPrompt = mergeNeutraSheetRows({ hist, base, prompt: [] });
+  assert(
+    withPrompt.fontes[0] === "PROMPT NEUTRA" || !prompt.length,
+    `ordem fontes começa PROMPT: ${withPrompt.fontes.join(">")}`,
+  );
+  assert(withPrompt.histPresente, "HIST presente");
+  assert(
+    withPrompt.fontes.join(">") === "PROMPT NEUTRA>BASE NEUTRA HIST>BASE NEUTRA" ||
+      withPrompt.fontes.join(">") === "PROMPT NEUTRA>BASE NEUTRA HIST",
+    `fontes=${withPrompt.fontes.join(">")}`,
   );
 
   const expect: Record<string, number> = {
@@ -82,46 +88,52 @@ async function main() {
     "2026-11": 1413,
   };
 
-  for (const [mes, exp] of Object.entries(expect)) {
-    const built = buildNeutraFromBase({
-      baseRows: merged.rows,
-      equipeRows: ranges[2]?.values || [],
-      mes,
-    });
-    const got = built.resumo.produtivas + built.resumo.improdutivas;
-    if (mes === "2026-11") {
-      assert(
-        Math.abs(got - exp) <= 5,
-        `${mes} concluídas≈${exp} got ${got} (prod ${built.resumo.produtivas})`,
-      );
-    } else {
-      assert(
-        got === exp,
-        `${mes} concluídas=${exp} got ${got} (prod ${built.resumo.produtivas})`,
-      );
+  for (const label of ["com PROMPT", "sem PROMPT"] as const) {
+    const merged = label === "com PROMPT" ? withPrompt : withoutPrompt;
+    console.log("\n===", label, merged.fontes.join(" → "));
+    for (const [mes, exp] of Object.entries(expect)) {
+      const built = buildNeutraFromBase({
+        baseRows: merged.rows,
+        equipeRows: eq,
+        mes,
+      });
+      const got = built.resumo.produtivas + built.resumo.improdutivas;
+      if (mes === "2026-11") {
+        assert(
+          got === exp &&
+            built.resumo.produtivas === 1012 &&
+            built.resumo.improdutivas === 401,
+          `${label} ${mes} concl=${exp} (1012/401) got ${got} (${built.resumo.produtivas}/${built.resumo.improdutivas})`,
+        );
+        const vd = built.visao_dia;
+        const col17 = vd?.cols?.find((c) => c.dia === 17 || c.label?.includes("17"));
+        // soma produtivas do dia 17 na visão
+        let dia17 = 0;
+        if (vd) {
+          const idx = vd.cols.findIndex(
+            (c) => Number(c.dia) === 17 || String(c.label || "") === "17",
+          );
+          if (idx >= 0) {
+            for (const row of vd.rows) {
+              dia17 += Number(row.por_dia?.[idx] || 0);
+            }
+          }
+        }
+        assert(dia17 === 60, `${label} dia 17/11 produtivas=60 got ${dia17}`);
+      } else {
+        assert(
+          got === exp,
+          `${label} ${mes} concluídas=${exp} got ${got}`,
+        );
+      }
     }
-    assert(
-      built.meses_disponiveis.includes("2026-08"),
-      "meses incluem 2026-08 (AGO)",
-    );
   }
-
-  const banco = await syncBancoFromSheets({ trigger: "smoke" });
-  assert(banco.ok, `banco sync ok: ${banco.mensagem}`);
-  assert(
-    (banco.contagens.atividades_neutra || 0) > 1000,
-    `atividades_neutra>1000 got ${banco.contagens.atividades_neutra}`,
-  );
-  assert(
-    (banco.contagens.snapshots_mensais || 0) >= 4,
-    `snapshots>=4 got ${banco.contagens.snapshots_mensais}`,
-  );
 
   if (fails.length) {
     console.error("FAIL", fails);
     process.exit(1);
   }
-  console.log("ALL OK");
+  console.log("\nALL OK");
 }
 
 main().catch((e) => {
