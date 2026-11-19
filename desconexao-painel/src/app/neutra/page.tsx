@@ -23,10 +23,10 @@ function num1(n: number): string {
   });
 }
 
-const FALLBACK_MESES = ["2026-09", "2026-10", "2026-11"];
+const FALLBACK_MESES = ["2026-08", "2026-09", "2026-10", "2026-11"];
 
 function monthLabel(mes: string): string {
-  if (mes.trim().toUpperCase() === "TOTAL") return "TOTAL · BASE NEUTRA";
+  if (mes.trim().toUpperCase() === "TOTAL") return "TOTAL · NEUTRA (HIST+BASE+PROMPT)";
   if (/^\d{4}$/.test(mes.trim())) return `TOTAL · ${mes.trim()}`;
   return labelPeriodo(mes);
 }
@@ -138,7 +138,7 @@ function NeutraInner() {
           <div className="ops-lead reveal">
             <div>
               <p className="ops-kicker">
-                Leitura só · BASE NEUTRA + EQUIPE NEUTRA
+                Leitura só · HIST + BASE + PROMPT · EQUIPE · dedupe SA
                 {data?.dados_ate_br
                   ? ` · dados até ${data.dados_ate_br}`
                   : ""}

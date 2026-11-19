@@ -24,8 +24,9 @@ Abrir http://127.0.0.1:3000/painel e digitar `dev-local-token` (só quando `PAIN
 - `/iat` — IAT (meses SET+OUT+NOV desde 22/09 + TOTAL)
 - `/historico-tecnico` — cards por técnico (aba HISTÓRICO TÉCNICO)
 - `/retornos` — retornos (aba RETORNOS; substitui Retorno Credenciada)
-- `/neutra` — Neutra (PROMPT + BASE, dedupe SA)
-- `/financeiro` — Financeiro
+- `/neutra` — Neutra (HIST + BASE + PROMPT, dedupe SA; AGO–NOV)
+- `/financeiro` — Financeiro (Neutra inclui SET/OUT)
+- `/banco` — espelho Postgres (opção A): sync + snapshots mensais
 
 ## Período (Mês + Ano + TOTAL)
 
@@ -68,4 +69,16 @@ Dois modos pedidos (Debora 18/11):
 - `GET /api/retornos`
 - `GET /api/neutra?mes=TOTAL|YYYY|YYYY-MM`
 - `GET /api/financeiro?mes=TOTAL|YYYY|YYYY-MM`
-- `POST /api/sync` — cookie ou Bearer; rate limit 3 / 5 min por IP
+- `GET /api/banco` — status do espelho Postgres
+- `POST /api/sync` — cookie ou Bearer; painel + banco (upsert); rate limit
+- `POST /api/cron/sync` — mesmo token; agendar 07:00 America/Sao_Paulo
+
+## Banco (opção A)
+
+Proposta: [`docs/PROPOSTA-BANCO-DE-DADOS.md`](docs/PROPOSTA-BANCO-DE-DADOS.md) (path `app/` conflita com o App Router em `src/app/`).
+
+- `cursor-app.json` → `{ "database": "postgres" }`
+- `src/lib/db.ts` — `pg` se `DATABASE_URL`; senão PGlite em memória
+- Migrations: `001_init.sql`, `002_opcao_a_operacional.sql` (tecnicos sem CPF/PII, atividades, retornos, LPU com vigência, snapshots, sync_runs; **`ano_mes` indexado**)
+- Build: `next build && node scripts/migrate.mjs`
+- Sync só-leitura das planilhas; botão Sincronizar + cron; upsert; fecha mês civil ao terminar

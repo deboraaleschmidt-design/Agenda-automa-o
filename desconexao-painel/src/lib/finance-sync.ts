@@ -26,6 +26,7 @@ import {
   priceIatOsList,
   type LpuItem,
 } from "./lpu-parse";
+import { mergeNeutraSheetRows } from "./neutra-merge";
 import {
   isInstMud,
   isRetirada,
@@ -635,7 +636,11 @@ export async function syncFinanceiro(opts?: {
       SPREADSHEET_NEUTRA_ID
         ? auth.sheets.spreadsheets.values.batchGet({
             spreadsheetId: SPREADSHEET_NEUTRA_ID,
-            ranges: ["'BASE NEUTRA'!A1:Z", "'EQUIPE NEUTRA'!A1:H80"],
+            ranges: [
+              "'BASE NEUTRA'!A1:Z",
+              "'PROMPT NEUTRA'!A1:Z",
+              "'EQUIPE NEUTRA'!A1:H80",
+            ],
             valueRenderOption: "FORMATTED_VALUE",
           })
         : Promise.resolve({
@@ -659,8 +664,23 @@ export async function syncFinanceiro(opts?: {
     const eqRows = d1Ranges[2]?.values || [];
 
     const neutraRanges = neutraRes.data.valueRanges || [];
-    const neutraBase = neutraRanges[0]?.values || [];
-    const neutraEq = neutraRanges[1]?.values || [];
+    const neutraBaseRaw = neutraRanges[0]?.values || [];
+    const neutraPromptRaw = neutraRanges[1]?.values || [];
+    const neutraEq = neutraRanges[2]?.values || [];
+
+    let neutraHistRaw: unknown[][] = [];
+    if (SPREADSHEET_NEUTRA_ID) {
+      try {
+        const histRes = await auth.sheets.spreadsheets.values.get({
+          spreadsheetId: SPREADSHEET_NEUTRA_ID,
+          range: "'BASE NEUTRA HIST'!A1:Z",
+          valueRenderOption: "FORMATTED_VALUE",
+        });
+        neutraHistRaw = histRes.data.values || [];
+      } catch {
+        neutraHistRaw = [];
+      }
+    }
 
     const lpuRanges = lpuRes.data.valueRanges || [];
     const lpuDes = parseLpuDesconexao(lpuRanges[0]?.values || []);
@@ -676,14 +696,24 @@ export async function syncFinanceiro(opts?: {
     const iat = buildIatAtividades(regs, eqRows, mes, lpuIat.items);
 
     const neutraEquipe = parseEquipeNeutra(neutraEq);
+    const neutraMerged = mergeNeutraSheetRows({
+      hist: neutraHistRaw,
+      base: neutraBaseRaw,
+      prompt: neutraPromptRaw,
+    });
     const { regs: neutraRegs, avisos: neutraParseAvisos } = SPREADSHEET_NEUTRA_ID
-      ? parseBaseNeutraRegs(neutraBase, neutraEquipe)
+      ? parseBaseNeutraRegs(neutraMerged.rows, neutraEquipe)
       : {
           regs: [] as NeutraReg[],
           avisos: [
             "Neutra: GOOGLE_SHEETS_NEUTRA_ID / GOOGLE_SHEETS_D1_ID não configurado (sem id fixo no código).",
           ],
         };
+    if (SPREADSHEET_NEUTRA_ID && !neutraMerged.histPresente) {
+      neutraParseAvisos.push(
+        "Neutra: BASE NEUTRA HIST ausente — SET/OUT via PROMPT+BASE.",
+      );
+    }
     const neutra = buildNeutraAtividades(neutraRegs, mes, {
       comDrop: lpuNeutra.comDrop,
       semDrop: lpuNeutra.semDrop,
